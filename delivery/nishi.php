@@ -1,11 +1,12 @@
 <?php
 /*
  * ============================================================================
- *  NISHI 形式 大会結果 一覧出力（1.php）
+ *  NISHI 形式 大会結果 一覧出力（nishi.php ／ 旧称 1.php）
  * ============================================================================
+ *  版     : 2026-09-15b（所属1＝学校名 ／ 所属2＝都道府県・地区）
  *  対象   : https://.../shtml/TimeTable.html 形式の大会結果ページ
  *           （TimeTable.json / Taikai.json / result/ 以下の各 json を読み込みます）
- *  使い方 : 1.php?url=https://.../shtml/TimeTable.html   （POST の url でも可）
+ *  使い方 : nishi.php?url=https://.../shtml/TimeTable.html   （POST の url でも可）
  *
  *  出力列 : 日付 / 大会名 / 種目 / 風速 / レース状況 / 組 / 順位 / 記録 / 氏名 /
  *           氏名カナ / 学年 / 所属1 / 所属2 / 性別 / 表示/非表示 / 備考
@@ -31,6 +32,7 @@ define('NISHI_FETCH_PARALLEL', 8);     // 結果ファイルの同時取得数
 define('NISHI_FETCH_TIMEOUT', 30);     // 1ファイルあたりのタイムアウト（秒）
 define('NISHI_FETCH_DEADLINE', 240);   // 取得処理全体の上限（秒）
 define('NISHI_USER_AGENT', 'Mozilla/5.0 (compatible; NishiResultExport/1.0)');
+define('NISHI_EXPORT_VERSION', '2026-09-15b');
 
 /* ---------------------------------------------------------------------------
  *  メイン
@@ -304,13 +306,13 @@ function nishi_round_rows($data, $r, $taikai_name, &$grade_map)
                 if ($team === '') {
                     list($team, $pref) = nishi_affiliation(isset($a['ShozokuMei']) ? $a['ShozokuMei'] : '');
                 }
-                $aff1 = $team;
+                $aff1 = $team; // リレーはチーム名（学校名）を所属1に
                 $aff2 = '';
             } else {
                 list($name, $grade) = nishi_person(nishi_person_raw($a));
                 list($school, $pref) = nishi_affiliation(isset($a['ShozokuMei']) ? $a['ShozokuMei'] : (isset($a['Shozoku']) ? $a['Shozoku'] : ''));
-                $aff1 = $pref;
-                $aff2 = $school;
+                $aff1 = $school;
+                $aff2 = $pref;
             }
 
             $rows[] = array(
@@ -362,7 +364,7 @@ function nishi_konsei_rows($data, $kyogimei, $date, $taikai_name, $grade_map)
 
         $rows[] = array(
             $date, $taikai_name, $event, '', $race, '',
-            nishi_rank($a), $record, $name, '', $grade, $pref, $school, $split['sex'], '', '',
+            nishi_rank($a), $record, $name, '', $grade, $school, $pref, $split['sex'], '', '',
         );
     }
     return $rows;
@@ -798,7 +800,8 @@ function nishi_render($rows, $errors)
     $headers = array('日付', '大会名', '種目', '風速', 'レース状況', '組', '順位', '記録', '氏名',
                      '氏名カナ', '学年', '所属1', '所属2', '性別', '表示/非表示', '備考');
 
-    echo "<html>\r\n<head>\r\n<meta charset=\"UTF-8\">\r\n<meta name=\"robots\" content=\"noindex\">\r\n<title>結果一覧</title>\r\n</head>\r\n<body>\r\n";
+    echo "<html>\r\n<head>\r\n<meta charset=\"UTF-8\">\r\n<meta name=\"robots\" content=\"noindex\">\r\n<title>結果一覧</title>\r\n";
+    echo '<!-- NISHI result export ' . NISHI_EXPORT_VERSION . " -->\r\n</head>\r\n<body>\r\n";
     foreach ($errors as $e) {
         echo '<p style="color:#CC0000;font-weight:bold;">' . nishi_h($e) . "</p>\r\n";
     }

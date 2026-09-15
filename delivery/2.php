@@ -650,22 +650,10 @@ $record03 = str_replace('"Kiroku":"', '', $record02);
 if ($record03){
 $record04 = preg_replace('/[m:]/', '.', $record03);
 
-if (($x_event_type == "100M") || ($x_event_type == "200M") || ($x_event_type == "300M") || ($x_event_type == "400M") || ($x_event_type == "100MH") || ($x_event_type == "110MH") || ($x_event_type == "400MH") || ($x_event_type == "4×100MR")){
-$dotto = substr_count($record04, '.');
-if ($dotto == 2){
-$record_001_front = substr($record04, 0, 3);
-if ($record_001_front == "1.0"){ $record_001_front = "6";
-}elseif ($record_001_front == "1.1"){ $record_001_front = "7";
-}elseif ($record_001_front == "1.2"){ $record_001_front = "8";
-}elseif ($record_001_front == "1.3"){ $record_001_front = "9";
-}elseif ($record_001_front == "1.4"){ $record_001_front = "10";
-}elseif ($record_001_front == "1.5"){ $record_001_front = "11";
-}elseif ($record_001_front == "2.0"){ $record_001_front = "12";
-}elseif ($record_001_front == "2.1"){ $record_001_front = "13";
-}else{ $record_001_front = $record_001_front;
-}
-$record_001_back = substr($record04, 3);
-$new_record = $record_001_front . $record_001_back;
+//400m以下の種目（100m～400m・ハードル・4×100mR）で1分を超える記録は秒に換算（1.01.90 → 61.90）
+if (preg_match('/^(100|110|200|300|400)m([a-z]{0,2}h)?$/i', $x_event_type) || preg_match('/^4\x{00D7}100mR$/iu', $x_event_type)){
+if (preg_match('/^(\d+)\.(\d{2})\.(\d{2})$/', $record04, $record_sec)){
+$new_record = ((int)$record_sec[1] * 60 + (int)$record_sec[2]) . '.' . $record_sec[3];
 }else{
 $new_record = $record04;
 }
