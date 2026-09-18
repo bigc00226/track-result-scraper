@@ -1,0 +1,26 @@
+<html><head><meta charset="UTF-8"><title>top test</title></head><body><table align="center" bgcolor="#333333">
+<tr><td align="center" style="padding:10px 20px;" bgcolor="#F6E3CE">
+<h2 style='font-size:x-large;'>PDF（結果・スタートリスト）</h2>
+<div style='font-size:18px;font-weight:bold;'>【結果】</div>
+<form onsubmit="return pdfToolGo(this, 'pdf_result.php', 'result');">
+<input type='file' name='pdf' accept='application/pdf,.pdf' style='font-size:large;' />
+<input type='submit' style='font-size:x-large;' value='  GO!!  ' />
+</form>
+<div style='font-size:18px;font-weight:bold;'>【スタートリスト　info-ch用 ソースコード】</div>
+<form onsubmit="return pdfToolGo(this, 'pdf_startlist.php', 'startlist');">
+<input type='file' name='pdf' accept='application/pdf,.pdf' style='font-size:large;' />
+<input type='submit' style='font-size:x-large;' value='  GO!!  ' />
+</form>
+<script>
+// 選んだ PDF は新しいタブの画面に直接渡します（サーバには送信しません）
+function pdfToolGo(form, page, mode) {
+    var f = form.pdf.files && form.pdf.files[0];
+    if (!f) { alert('PDFファイルを選択してください'); return false; }
+    window.__pdfToolFile = f;
+    window.__pdfToolMode = mode;
+    window.open(page, '_blank');
+    return false;
+}
+</script>
+</td></tr>
+</table></body></html>

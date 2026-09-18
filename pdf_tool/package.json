@@ -1,0 +1,8 @@
+{
+  "name": "pdf-tool-dev",
+  "private": true,
+  "description": "Dev/test harness for the PDF start list / result tool (browser code runs on pdf.js)",
+  "devDependencies": {
+    "pdfjs-dist": "3.11.174"
+  }
+}
