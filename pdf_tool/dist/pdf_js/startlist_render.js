@@ -4,6 +4,7 @@
  *   NISHI 下段（【info-ch用 ソースコード】）と同じ構成
  *     種目ごとの開閉タブ（cp_actab）＋ 表（s-tbl2）
  *   色（お客様ご指定）
+ *     種目の見出し：背景 #73E65C（文字は男子 #0B3D91・女子 #A3004F）
  *     男子：組の行 #93C6F4 ／ 交互の行 #ECF5FF と白
  *     女子：組の行 #FFA4FD ／ 交互の行 #FFECFF と白
  *   各行：氏名(学年) 所属(都道府県) ＋ 資格記録（後ろ・前・なしを選択）
@@ -17,9 +18,12 @@
 }(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
+    // 種目の見出し（開閉タブ）の背景はお客様ご指定の #73E65C。
+    // 文字色は緑の背景でも読めるように、男子は濃い青・女子は濃いピンク
+    var LABEL_BG = '#73E65C';
     var COLORS = {
-        '男子': { head: '#93C6F4', light: '#ECF5FF', label: '#A9D0F5' },
-        '女子': { head: '#FFA4FD', light: '#FFECFF', label: '#F5A9A9' }
+        '男子': { head: '#93C6F4', light: '#ECF5FF', label: '#0B3D91' },
+        '女子': { head: '#FFA4FD', light: '#FFECFF', label: '#A3004F' }
     };
     var TITLE_COLOR = '#FF0000';     // 「スタートリスト」の文字色
     var WHITE = '#FFFFFF';
@@ -69,7 +73,7 @@
 
             out.push('<div class="cp_actab">');
             out.push('<input id="' + esc(id) + '" type="checkbox" name="tabs">');
-            out.push('<label for="' + esc(id) + '" style="color:' + pal.label + ';background-color:#6E6E6E;">' + esc(ev.label) + '</label>');
+            out.push('<label for="' + esc(id) + '" style="color:' + pal.label + ';background-color:' + LABEL_BG + ';">' + esc(ev.label) + '</label>');
             out.push('<div class="cp_actab-content">');
             out.push('');
             out.push('<table class="s-tbl2" width="100%" style="width:100%;">');

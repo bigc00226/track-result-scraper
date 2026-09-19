@@ -532,6 +532,10 @@
         });
         state.events = state.events.filter(function (ev) { return ev.heats.length; });
 
+        var gaijiPages = pages.filter(function (pg) { return pg.gaiji; }).map(function (pg) { return pg.num; });
+        if (gaijiPages.length) {
+            state.warnings.push({ type: 'gaiji', message: pageRanges(gaijiPages) + 'ページ目に、PDF の中で文字の情報がない特殊な文字（外字）があり、「〓」で表示しています。該当の氏名・所属を確認してください。' });
+        }
         if (unreadable.length) {
             var nums = unreadable.map(function (u) { return u.num; });
             state.warnings.push({

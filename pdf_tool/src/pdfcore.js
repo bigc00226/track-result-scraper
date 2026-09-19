@@ -290,7 +290,12 @@
                     });
                 }
                 var chars = [];
-                raw.forEach(function (r) { explode(r.str, r.x, r.y, r.w, r.fs, chars); });
+                var gaiji = 0;
+                raw.forEach(function (r) {
+                    // 外字（私用領域の文字）は表示できないので「〓」にする
+                    var str = r.str.replace(/[\uE000-\uF8FF]/g, function () { gaiji++; return '〓'; });
+                    explode(str, r.x, r.y, r.w, r.fs, chars);
+                });
                 chars = dedupeChars(chars.filter(function (c) { return true; }));
                 var words = charsToWords(chars);
                 var lines = wordsToLines(words);
@@ -299,6 +304,7 @@
                     width: pw,
                     height: ph,
                     rotated: dom,
+                    gaiji: gaiji,
                     words: words,
                     lines: lines,
                     textChars: chars.filter(function (c) { return /\S/.test(c.c); }).length,
@@ -306,6 +312,17 @@
                     pathOps: 0,
                     imageOps: 0
                 };
+                // 決勝一覧表（1位・2位…の見出しがあるページ）は、表の罫線（横線）も読む
+                var placeHdr = lines.some(function (L) {
+                    return L.words.filter(function (w) { return /^[1-8１-８]位$/.test(w.t); }).length >= 3;
+                });
+                if (placeHdr) {
+                    return page.getOperatorList().then(function (ol) {
+                        pg.hrules = horizontalRules(pdfjsLib, ol, vp, dom ? { th: -dom * Math.PI / 180, vp: vp } : null);
+                        page.cleanup();
+                        return pg;
+                    }, function () { page.cleanup(); return pg; });
+                }
                 if (opts.countOps === false || pg.textChars > 40) {
                     page.cleanup();
                     return pg;
@@ -325,6 +342,64 @@
                 }, function () { return pg; });
             });
         });
+    }
+
+    // ---------------------------------------------------------------
+    // 表の横線（罫線）を取り出す：[{ x1, x2, y }]（ページの座標）
+    // ---------------------------------------------------------------
+    function horizontalRules(pdfjsLib, ol, vp, rot) {
+        var OPS = pdfjsLib.OPS, U = pdfjsLib.Util;
+        var ctm = [1, 0, 0, 1, 0, 0], stack = [], out = [];
+        var toPage = function (x, y) {
+            var p = U.applyTransform(U.applyTransform([x, y], ctm), vp.transform);
+            if (rot) {
+                var c = Math.cos(rot.th), sn = Math.sin(rot.th);
+                var corners = [[0, 0], [vp.width, 0], [0, vp.height], [vp.width, vp.height]].map(function (q) { return [q[0] * c - q[1] * sn, q[0] * sn + q[1] * c]; });
+                var minX = Math.min.apply(null, corners.map(function (q) { return q[0]; }));
+                var minY = Math.min.apply(null, corners.map(function (q) { return q[1]; }));
+                p = [p[0] * c - p[1] * sn - minX, p[0] * sn + p[1] * c - minY];
+            }
+            return p;
+        };
+        // 線は「描いた線（stroke）」だけを使う。塗りつぶし（fill）は細いものだけ線とみなす
+        //（行の背景色の帯などを罫線と間違えないため）
+        var pend = [], pendThin = [];
+        var addSeg = function (list, a, b) {
+            if (Math.abs(a[1] - b[1]) < 0.6 && Math.abs(a[0] - b[0]) > 3) {
+                list.push({ x1: Math.min(a[0], b[0]), x2: Math.max(a[0], b[0]), y: (a[1] + b[1]) / 2 });
+            }
+        };
+        var STROKE = [OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke];
+        var FILL = [OPS.fill, OPS.eoFill];
+        for (var i = 0; i < ol.fnArray.length; i++) {
+            var f = ol.fnArray[i], args = ol.argsArray[i];
+            if (f === OPS.save) stack.push(ctm.slice());
+            else if (f === OPS.restore) { if (stack.length) ctm = stack.pop(); }
+            else if (f === OPS.transform) ctm = U.transform(ctm, args);
+            else if (f === OPS.constructPath) {
+                var ops = args[0], co = args[1], k = 0, cur = null, start = null;
+                for (var j = 0; j < ops.length; j++) {
+                    var op = ops[j];
+                    if (op === OPS.moveTo) { cur = toPage(co[k], co[k + 1]); start = cur; k += 2; }
+                    else if (op === OPS.lineTo) { var nx = toPage(co[k], co[k + 1]); if (cur) addSeg(pend, cur, nx); cur = nx; k += 2; }
+                    else if (op === OPS.rectangle) {
+                        var x = co[k], y = co[k + 1], w = co[k + 2], h = co[k + 3];
+                        var p1 = toPage(x, y), p2 = toPage(x + w, y), p3 = toPage(x, y + h), p4 = toPage(x + w, y + h);
+                        addSeg(pend, p1, p2); addSeg(pend, p3, p4);
+                        // 細い長方形（線として描かれたもの）
+                        if (Math.abs(p1[1] - p3[1]) < 1.5) addSeg(pendThin, [p1[0], (p1[1] + p3[1]) / 2], [p2[0], (p2[1] + p4[1]) / 2]);
+                        k += 4;
+                    }
+                    else if (op === OPS.curveTo) { cur = toPage(co[k + 4], co[k + 5]); k += 6; }
+                    else if (op === OPS.curveTo2 || op === OPS.curveTo3) { cur = toPage(co[k + 2], co[k + 3]); k += 4; }
+                    else if (op === OPS.closePath) { if (cur && start) addSeg(pend, cur, start); cur = start; }
+                }
+            }
+            else if (STROKE.indexOf(f) >= 0) { out = out.concat(pend); pend = []; pendThin = []; }
+            else if (FILL.indexOf(f) >= 0) { out = out.concat(pendThin); pend = []; pendThin = []; }
+            else if (f === OPS.endPath) { pend = []; pendThin = []; }
+        }
+        return out;
     }
 
     // ---------------------------------------------------------------
