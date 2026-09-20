@@ -51,10 +51,10 @@ color: #6D4C00;
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
-<script src="pdf_js/pdfcore.js?v=2"></script>
-<script src="pdf_js/result.js?v=2"></script>
-<script src="pdf_js/result_render.js?v=2"></script>
-<script src="pdf_js/pdf_page.js?v=2"></script>
+<script src="pdf_js/pdfcore.js?v=3"></script>
+<script src="pdf_js/result.js?v=3"></script>
+<script src="pdf_js/result_render.js?v=3"></script>
+<script src="pdf_js/pdf_page.js?v=3"></script>
 <script>
 PdfPage.init({
     mode: 'result',

@@ -25,7 +25,7 @@
     // ---------------------------------------------------------------
     // 見出しの判定
     // ---------------------------------------------------------------
-    var ROUND_RE = /^(タイムレース決勝|タイムレース予選|タイムレース|TR決勝|準々決勝|準決勝|決勝|予選|記録会|オープン)/;
+    var ROUND_RE = /^([A-Z]?(?:タイムレース決勝|タイムレース予選|タイムレース|TR決勝|準々決勝|準決勝|決勝)|予選|記録会|オープン)/;
     var HEAT_RE = /^(\d{1,3})組$/;
     var GENDER_RE = /(男女混合|男女|混合|男子|女子)/;
     var EVENT_START_RE = /(\d|走高跳|棒高跳|走幅跳|三段跳|砲丸投|円盤投|ハンマー投|やり投|ジャベリックスロー|十種|八種|七種|五種|四種|混成|競歩)/;
@@ -98,20 +98,37 @@
         return sc;
     }
 
+    // 所属の欄：「宮 城・東北大学」「仙台大学・学 連」どちらの並びにも対応
+    var REGION_RE = /^(学連|[東西南北]?[東西南北]?(日本|地区)?|北海道|東北|関東|北信越|東海|近畿|中国|四国|九州|沖縄)$/;
+
     function splitTeam(lines) {
         var team = [], pref = '', qual = '';
         lines.forEach(function (t) {
             var sq = squash(norm(t));
-            if (!sq || /^[+･・\-.m]+$/.test(sq) || /･/.test(sq)) return;
+            if (!sq || /^[()（）.\-+･・m\s]*$/.test(sq)) return;    // 「( ) .」「m」などの空欄の記号
+            if (/^[+\-±]?\d{1,2}\.\d$/.test(sq)) return;            // 風
             if (C.isRecord(sq)) { if (!qual) qual = sq; return; }
-            var k = sq.indexOf('・');
-            if (k > 0 && k <= 4) {
-                var left = sq.slice(0, k);
-                pref = pref || C.prefName(left);
-                team.push(norm(t).replace(/^[^・]*・\s*/, ''));
+            // 風の記号（「+」「-」「+･-」）が所属の右に並ぶ表があるので、前後の記号を取り除く
+            t = norm(t).replace(/[\s+\-±･・.]+$/, '').replace(/^[\s+\-±･・]+/, '');
+            sq = squash(t);
+            if (!sq) return;
+            var nt = norm(t), ki = nt.indexOf('・');
+            if (ki > 0 && ki < nt.length - 1) {
+                // 「都道府県・所属」「所属・都道府県」どちらの並びか、中身を見て決める
+                var leftT = nt.slice(0, ki).trim(), rightT = nt.slice(ki + 1).trim();
+                var left = squash(leftT), right = squash(rightT);
+                var leftPref = C.isPref(left) || REGION_RE.test(left);
+                var rightPref = C.isPref(right) || REGION_RE.test(right);
+                if (leftPref && !rightPref) { pref = pref || C.prefName(left); team.push(rightT); return; }
+                if (rightPref && !leftPref) { pref = pref || C.prefName(right); team.push(leftT); return; }
+                if (leftPref && rightPref) { pref = pref || C.prefName(right); team.push(leftT); return; }
+                // どちらも都道府県名でない場合（国名コードなど）は、短い方を都道府県の欄に
+                if (left.length <= 4 && left.length < right.length) { pref = pref || leftT; team.push(rightT); return; }
+                if (right.length <= 4 && right.length < left.length) { pref = pref || rightT; team.push(leftT); return; }
+                team.push(nt);
                 return;
             }
-            if (C.isPref(sq) && !pref) { pref = C.prefName(sq); return; }
+            if ((C.isPref(sq) || REGION_RE.test(sq)) && !pref) { pref = C.prefName(sq); return; }
             team.push(norm(t));
         });
         return { team: team.join(' ').replace(/\s+/g, ' ').trim(), pref: pref, qual: qual };
@@ -125,11 +142,26 @@
         name: /^(氏|氏名|競技者名)$/,
         team: /^(所|所属|所属\/資格記録)$/,
         qual: /^(資格記録|資格|前記録)$/,
-        result: /^(順位|順位\(ﾅﾝﾊﾞｰ\)記録|1回目|ｺﾒﾝﾄ|記録)$/
+        result: /順位|^1回目$|^ｺﾒﾝﾄ$/
     };
 
+    // 見出しの語がくっついている表（「ﾚｰﾝﾅﾝﾊﾞｰ」）にも対応する
+    function numberHeaders(line) {
+        var out = [];
+        line.words.forEach(function (w) {
+            var t = C.hanToZenKana(w.t);
+            var i = t.indexOf('ナンバー');
+            if (i < 0) return;
+            if (i === 0 && t.length === 4) { out.push({ x: w.x, laneX: null, w: w }); return; }
+            // 「ﾚｰﾝ」「ORD」「試順」などが前にくっついている場合は、文字数で位置を分ける
+            var numX = w.x + (w.x2 - w.x) * (i / t.length);
+            out.push({ x: numX, laneX: i > 0 ? w.x : null, w: w });
+        });
+        return out;
+    }
+
     function findBlocks(page, hdrLine) {
-        var numWords = hdrLine.words.filter(function (w) { return /^ﾅﾝﾊﾞｰ$|^ナンバー$/.test(w.t); });
+        var numWords = numberHeaders(hdrLine);
         // ヘッダーは 2～3 行に分かれていることがある（「試/順」「資格/記録」など）
         var zone = page.lines.filter(function (L) { return L.y >= hdrLine.y - 9 && L.y <= hdrLine.y + 16; });
         var zoneWords = [];
@@ -137,7 +169,7 @@
         var blocks = numWords.map(function (nw) {
             var laneW = zoneWords.filter(function (w) { return HDR.lane.test(w.t) && w.x < nw.x && nw.x - w.x < 45; })
                 .sort(function (a, b) { return b.x - a.x; })[0];
-            return { numX: nw.x, laneX: laneW ? laneW.x : nw.x - 14 };
+            return { numX: nw.x, laneX: nw.laneX !== null ? nw.laneX : (laneW ? laneW.x : nw.x - 14) };
         }).sort(function (a, b) { return a.laneX - b.laneX; });
         blocks.forEach(function (b, i) {
             b.x0 = b.laneX - 8;
@@ -151,7 +183,7 @@
             b.nameX = first(HDR.name, b.numX) || b.numX + 20;
             b.teamX = first(HDR.team, b.nameX) || b.nameX + 60;
             b.qualX = first(HDR.qual, b.teamX);
-            b.resultX = first(/^(順位|順位\(ﾅﾝﾊﾞｰ\)記録|1回目)$/, b.teamX) || b.x1;
+            b.resultX = first(/順位|^1回目$/, b.teamX) || b.x1;
             if (b.qualX !== null && b.qualX >= b.resultX) b.qualX = null;
             // 列の中央（見出しが列の中央に書かれている表もあるので、境目は中央と中央の間にする）
             var span = function (re, from, to) {
@@ -167,7 +199,7 @@
             // 氏名と所属の境目：見出しの中央と中央の間（見出しが列の中央に書かれている表に対応）
             b.nameEnd = Math.max(Math.min((nameC + teamC) / 2, b.teamX - 3), nameC);
             b.teamEnd = qualC !== null ? Math.max(Math.min((teamC + qualC) / 2, b.qualX - 3), teamC) : b.resultX - 1;
-            b.hasName = inB.some(function (w) { return HDR.name.test(w.t) && w.x > b.numX; });
+            b.hasName = inB.some(function (w) { return HDR.name.test(w.t) && w.x > b.numX - 4; });
             b.hdrY = C.headerBottom(zone, hdrLine, b.x0, b.x1);
         });
         // ラップ表などの「ナンバー」だけの表は対象外

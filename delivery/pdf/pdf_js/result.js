@@ -258,6 +258,16 @@
             b.laneX = col(/^(ﾚｰﾝ|レーン|試順|ORD)$/, s.x);
             b.teamColX = col(/^(ﾁｰﾑ|チーム)$/, s.x);
             b.numX = col(/^(ﾅﾝﾊﾞｰ|ナンバー)$/, s.x);
+            if (b.numX === null) {
+                // 「ﾚｰﾝﾅﾝﾊﾞｰ」のように見出しの語がくっついている表
+                var nw = inB.filter(function (w) { return /ﾅﾝﾊﾞｰ|ナンバー/.test(C.hanToZenKana(w.t)) && w.x > s.x; })
+                    .sort(function (a, c) { return a.x - c.x; })[0];
+                if (nw) {
+                    var t0 = C.hanToZenKana(nw.t), i0 = t0.indexOf('ナンバー');
+                    b.numX = nw.x + (nw.x2 - nw.x) * (i0 / t0.length);
+                    if (b.laneX === null && i0 > 0) b.laneX = nw.x;
+                }
+            }
             b.relay = b.teamColX !== null;
             b.nameX = b.relay ? col(/^(ｵｰﾀﾞｰ|オーダー)$/, b.numX) : col(/^(氏名|氏)$/, b.numX);
             b.kanaX = col(/^(ｶﾅ|カナ)$/, b.nameX);
@@ -265,6 +275,7 @@
             b.attX = col(/^1回目$/, b.nameX);
             b.totalX = col(/^総合$/, b.nameX);
             b.cmtX = col(/^(ｺﾒﾝﾄ|コメント)$/, b.nameX);
+            if (b.cmtX === null) b.cmtX = col(/順位/, b.teamX !== null ? b.teamX : b.nameX);   // 「(順位)記録」など
             b.passX = col(/^通過$/, b.nameX);
             // 記録の列（「3回ﾍﾞｽﾄ」ではなく、ｺﾒﾝﾄの左の「記録」）
             var recs = inB.filter(function (w) { return w.t === '記録' && w.x > (b.nameX || 0); }).sort(function (a, c) { return a.x - c.x; });
@@ -429,13 +440,19 @@
             C.wordsByLine(teamWs).forEach(function (l) {
                 var sq = squash(norm(l.text));
                 if (!sq || RE_WIND.test(sq) || /^0\.\d{3}$/.test(sq) || C.isRecord(sq) || RE_STATUS.test(sq)) return;
+                if (/^[()（）.\-+･・m\s]*$/.test(sq)) return;              // 「( ) .」などの空欄の記号
+                l = { y: l.y, text: norm(l.text).replace(/[\s+\-±･・.]+$/, '').replace(/^[\s+\-±･・]+/, ''), words: l.words };
+                sq = squash(l.text);
+                if (!sq) return;
                 var inner = sq.replace(/^[(（](.*)[)）]$/, '$1');
                 if (C.isPref(inner) && !r.pref) { r.pref = C.prefName(inner); return; }
-                var k = sq.indexOf('・');
-                if (k > 0 && k <= 4 && C.isPref(sq.slice(0, k))) {
-                    r.pref = r.pref || C.prefName(sq.slice(0, k));
-                    teams.push(norm(l.text).replace(/^[^・]*・\s*/, ''));
-                    return;
+                // 「宮 城・東北大学」「仙台大学・学 連」どちらの並びにも対応
+                var nt = norm(l.text), ki = nt.indexOf('・');
+                if (ki > 0 && ki < nt.length - 1) {
+                    var leftT = nt.slice(0, ki).trim(), rightT = nt.slice(ki + 1).trim();
+                    var lp = C.isPref(squash(leftT)), rp = C.isPref(squash(rightT)) || /^学連$/.test(squash(rightT));
+                    if (lp && !rp) { r.pref = r.pref || C.prefName(squash(leftT)); teams.push(rightT); return; }
+                    if (rp && !lp) { r.pref = r.pref || C.prefName(squash(rightT)); teams.push(leftT); return; }
                 }
                 teams.push(l.text);
             });

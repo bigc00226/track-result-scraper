@@ -4,10 +4,14 @@
  *   NISHI 下段（【info-ch用 ソースコード】）と同じ構成
  *     種目ごとの開閉タブ（cp_actab）＋ 表（s-tbl2）
  *   色（お客様ご指定）
- *     種目の見出し：背景 #73E65C（文字は男子 #0B3D91・女子 #A3004F）
  *     男子：組の行 #93C6F4 ／ 交互の行 #ECF5FF と白
  *     女子：組の行 #FFA4FD ／ 交互の行 #FFECFF と白
- *   各行：氏名(学年) 所属(都道府県) ＋ 資格記録（後ろ・前・なしを選択）
+ *     種目の見出し：画面で切り替え
+ *       green-bg   … 背景 #73E65C ＋ 文字 男子 #0B3D91・女子 #A3004F
+ *       green-text … 背景 #6E6E6E（元のグレー）＋ 文字 #73E65C
+ *   各行：氏名(学年) (所属・都道府県) ＋ 資格記録（後ろ・前・なしを選択）
+ *     所属の表示は「(所属・都道府県)」と「所属(都道府県)」を画面で切り替え
+ *   種目は最初から開いた状態にもできます（画面で切り替え）
  */
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) {
@@ -20,7 +24,8 @@
 
     // 種目の見出し（開閉タブ）の背景はお客様ご指定の #73E65C。
     // 文字色は緑の背景でも読めるように、男子は濃い青・女子は濃いピンク
-    var LABEL_BG = '#73E65C';
+    var GREEN = '#73E65C';
+    var GRAY = '#6E6E6E';
     var COLORS = {
         '男子': { head: '#93C6F4', light: '#ECF5FF', label: '#0B3D91' },
         '女子': { head: '#FFA4FD', light: '#FFECFF', label: '#A3004F' }
@@ -36,10 +41,19 @@
         return COLORS[gender] || COLORS['男子'];
     }
 
-    function entryText(e, qualPos) {
+    function entryText(e, qualPos, teamFormat) {
         var parts = [];
         if (e.name) parts.push(e.name);
-        if (e.team || e.pref) parts.push(e.team ? e.team + (e.pref && e.pref !== e.team ? '(' + e.pref + ')' : '') : e.pref);
+        var pref = e.pref && e.pref !== e.team ? e.pref : '';
+        if (e.team || pref) {
+            if (teamFormat === 'plain') {
+                // 所属(都道府県)
+                parts.push(e.team ? e.team + (pref ? '(' + pref + ')' : '') : pref);
+            } else {
+                // (所属・都道府県)
+                parts.push('(' + [e.team, pref].filter(Boolean).join('・') + ')');
+            }
+        }
         var body = parts.join(' ');
         if (e.qual && qualPos === 'before') return e.qual + ' ' + body;
         if (e.qual && qualPos === 'after') return body + ' ' + e.qual;
@@ -64,6 +78,9 @@
     function render(events, opts) {
         opts = opts || {};
         var qualPos = opts.qualPos || 'after';
+        var teamFormat = opts.teamFormat || 'paren';
+        var greenText = opts.labelStyle === 'green-text';
+        var openAll = !!opts.openAll;
         var usedIds = {};
         var out = [];
         events.forEach(function (ev) {
@@ -72,8 +89,9 @@
             if (usedIds[id]) { usedIds[id]++; id += '_' + usedIds[id]; } else usedIds[id] = 1;
 
             out.push('<div class="cp_actab">');
-            out.push('<input id="' + esc(id) + '" type="checkbox" name="tabs">');
-            out.push('<label for="' + esc(id) + '" style="color:' + pal.label + ';background-color:' + LABEL_BG + ';">' + esc(ev.label) + '</label>');
+            out.push('<input id="' + esc(id) + '" type="checkbox" name="tabs"' + (openAll ? ' checked' : '') + '>');
+            out.push('<label for="' + esc(id) + '" style="color:' + (greenText ? GREEN : pal.label) +
+                ';background-color:' + (greenText ? GRAY : GREEN) + ';">' + esc(ev.label) + '</label>');
             out.push('<div class="cp_actab-content">');
             out.push('');
             out.push('<table class="s-tbl2" width="100%" style="width:100%;">');
@@ -90,7 +108,7 @@
                     rowNo++;
                     out.push('<tr>');
                     out.push('<td bgcolor="' + (rowNo % 2 === 0 ? pal.light : WHITE) + '">');
-                    out.push(esc(entryText(e, qualPos)));
+                    out.push(esc(entryText(e, qualPos, teamFormat)));
                     out.push('</td>');
                     out.push('</tr>');
                 });

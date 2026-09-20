@@ -95,9 +95,51 @@
 
     function currentOptions() {
         var opt = {};
-        var radios = document.querySelectorAll('input[name="pdf-qualpos"]');
-        for (var i = 0; i < radios.length; i++) if (radios[i].checked) opt.qualPos = radios[i].value;
+        ['pdf-qualpos', 'pdf-teamformat', 'pdf-labelstyle'].forEach(function (name) {
+            var radios = document.querySelectorAll('input[name="' + name + '"]');
+            for (var i = 0; i < radios.length; i++) {
+                if (!radios[i].checked) continue;
+                if (name === 'pdf-qualpos') opt.qualPos = radios[i].value;
+                else if (name === 'pdf-teamformat') opt.teamFormat = radios[i].value;
+                else opt.labelStyle = radios[i].value;
+            }
+        });
+        var open = document.getElementById('pdf-openall');
+        opt.openAll = !!(open && open.checked);
         return opt;
+    }
+
+    // 表示の選び方を、このパソコンのブラウザに覚えさせる
+    var STORE_KEY = 'pdfToolOptions';
+
+    function saveOptions() {
+        try {
+            var o = {};
+            var inputs = document.querySelectorAll('#pdf-panel input[type="radio"], #pdf-panel input[type="checkbox"]');
+            for (var i = 0; i < inputs.length; i++) {
+                var el = inputs[i];
+                if (el.type === 'radio') { if (el.checked) o[el.name] = el.value; }
+                else o[el.id] = el.checked;
+            }
+            localStorage.setItem(STORE_KEY + '.' + cfg.mode, JSON.stringify(o));
+        } catch (e) { /* 使えない場合は覚えないだけ */ }
+    }
+
+    function restoreOptions() {
+        try {
+            var raw = localStorage.getItem(STORE_KEY + '.' + cfg.mode);
+            if (!raw) return;
+            var o = JSON.parse(raw);
+            Object.keys(o).forEach(function (k) {
+                if (typeof o[k] === 'boolean') {
+                    var el = document.getElementById(k);
+                    if (el) el.checked = o[k];
+                } else {
+                    var r = document.querySelector('#pdf-panel input[name="' + k + '"][value="' + o[k] + '"]');
+                    if (r) r.checked = true;
+                }
+            });
+        } catch (e) { /* 壊れていたら既定のまま */ }
     }
 
     function init(c) {
@@ -111,8 +153,9 @@
         $('pdf-file').addEventListener('change', function () {
             if (this.files && this.files[0]) process(this.files[0]);
         });
-        var radios = document.querySelectorAll('input[name="pdf-qualpos"]');
-        for (var i = 0; i < radios.length; i++) radios[i].addEventListener('change', draw);
+        restoreOptions();
+        var inputs = document.querySelectorAll('#pdf-panel input[type="radio"], #pdf-panel input[type="checkbox"]');
+        for (var i = 0; i < inputs.length; i++) inputs[i].addEventListener('change', function () { saveOptions(); draw(); });
 
         // トップページで選んだ PDF を受け取る
         var file = null;

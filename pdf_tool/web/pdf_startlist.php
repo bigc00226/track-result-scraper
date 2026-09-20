@@ -154,6 +154,17 @@ jQuery(function($){
 <label><input type="radio" name="pdf-qualpos" value="before"> 前</label>
 <label><input type="radio" name="pdf-qualpos" value="none"> 表示しない</label>
 </div>
+<div class="row">所属の表示：
+<label><input type="radio" name="pdf-teamformat" value="paren" checked> (所属・都道府県)</label>
+<label><input type="radio" name="pdf-teamformat" value="plain"> 所属(都道府県)</label>
+</div>
+<div class="row">種目の見出し：
+<label><input type="radio" name="pdf-labelstyle" value="green-text" checked> グレー背景＋緑文字</label>
+<label><input type="radio" name="pdf-labelstyle" value="green-bg"> 緑背景＋濃い文字</label>
+</div>
+<div class="row">
+<label><input type="checkbox" id="pdf-openall" checked> 最初から全種目を開いた状態にする</label>
+</div>
 <div class="row" id="pdf-status"></div>
 <div id="pdf-warn"></div>
 </div>
@@ -162,10 +173,10 @@ jQuery(function($){
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
-<script src="pdf_js/pdfcore.js?v=2"></script>
-<script src="pdf_js/startlist.js?v=2"></script>
-<script src="pdf_js/startlist_render.js?v=2"></script>
-<script src="pdf_js/pdf_page.js?v=2"></script>
+<script src="pdf_js/pdfcore.js?v=3"></script>
+<script src="pdf_js/startlist.js?v=3"></script>
+<script src="pdf_js/startlist_render.js?v=3"></script>
+<script src="pdf_js/pdf_page.js?v=3"></script>
 <script>
 PdfPage.init({
     mode: 'startlist',
