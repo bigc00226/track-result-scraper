@@ -60,6 +60,7 @@
     // 氏名：「鈴木 郁(3)」→ ['鈴木 郁', '3']
     function person(raw) {
         var s = kanaAsk(raw).replace(/\s+/g, ' ').trim();
+        s = s.replace(/^〓([1-3])(?=\s)/, 'II-$1');      // パラのクラス「II-2」の外字
         var grade = '';
         var m = s.match(/^(.*?) *\(([^()]*)\) *$/);
         if (m) { s = m[1]; grade = m[2].replace(/ /g, ''); }
@@ -257,10 +258,10 @@
             var b = { x0: x0, x1: x1, rankX: s.x };
             b.laneX = col(/^(ﾚｰﾝ|レーン|試順|ORD)$/, s.x);
             b.teamColX = col(/^(ﾁｰﾑ|チーム)$/, s.x);
-            b.numX = col(/^(ﾅﾝﾊﾞｰ|ナンバー)$/, s.x);
+            b.numX = col(/^(ﾅﾝﾊﾞｰ|ナンバー|Bib\.?|BIB\.?)$/, s.x);
             if (b.numX === null) {
                 // 「ﾚｰﾝﾅﾝﾊﾞｰ」のように見出しの語がくっついている表
-                var nw = inB.filter(function (w) { return /ﾅﾝﾊﾞｰ|ナンバー/.test(C.hanToZenKana(w.t)) && w.x > s.x; })
+                var nw = inB.filter(function (w) { return /^(レーン|ORD|試順)ナンバー$/.test(C.hanToZenKana(w.t)) && w.x > s.x; })
                     .sort(function (a, c) { return a.x - c.x; })[0];
                 if (nw) {
                     var t0 = C.hanToZenKana(nw.t), i0 = t0.indexOf('ナンバー');
@@ -844,7 +845,7 @@
                 var rd = roundOf(L, page);
                 if (rd) marks.push({ type: 'round', y: L.y, info: rd });
                 var ts = L.words.map(function (w) { return w.t; });
-                if (ts.indexOf('順位') >= 0 && (ts.indexOf('ﾅﾝﾊﾞｰ') >= 0 || ts.indexOf('ナンバー') >= 0)) marks.push({ type: 'header', y: L.y, idx: idx });
+                if (ts.indexOf('順位') >= 0 && L.words.some(function (w) { return /^(ﾚｰﾝ|ORD|試順)?(ﾅﾝﾊﾞｰ|ナンバー)$|^(Bib|BIB)\.?$/.test(w.t); })) marks.push({ type: 'header', y: L.y, idx: idx });
                 L.words.forEach(function (w, wi) {
                     var m = w.t.match(/^(\d{1,3})組$/);
                     if (m) marks.push({ type: 'heat', y: L.y, x: w.x, no: parseInt(m[1], 10), line: L });
@@ -1009,9 +1010,16 @@
                 outRows.forEach(function (r) { var k = r[1] + '|' + r[13] + '|' + r[2] + '|' + r[4]; if (!seenEv[k]) { seenEv[k] = 1; events.push(k); } });
             }
         }
-        var gaijiPages = pages.filter(function (pg) { return pg.gaiji; }).map(function (pg) { return pg.num; });
-        if (gaijiPages.length) {
-            warnings.push({ type: 'gaiji', message: gaijiPages.join('・') + 'ページ目に、PDF の中で文字の情報がない特殊な文字（外字）があり、「〓」で表示しています。該当の氏名・所属を確認してください。' });
+        // 外字（〓）が残っている行を、種目名つきで知らせる
+        var gaijiList = [];
+        outRows.forEach(function (r) {
+            if ((r[8] + r[11] + r[12]).indexOf('〓') < 0) return;
+            var who = (r[8] || r[11]) + '（' + r[13] + ' ' + r[2] + ' ' + r[4] + '）';
+            if (gaijiList.indexOf(who) < 0) gaijiList.push(who);
+        });
+        if (gaijiList.length) {
+            warnings.push({ type: 'gaiji', message: 'PDF の中で文字の情報がない特殊な文字（外字）があり、「〓」で表示しています。手直しをお願いします：' +
+                gaijiList.slice(0, 15).join('、') + (gaijiList.length > 15 ? ' ほか' + (gaijiList.length - 15) + '件' : '') });
         }
         if (unreadable.length) {
             warnings.unshift({ type: 'unreadable', message: unreadable.join('・') + 'ページ目は、文字が図形・画像に変換されているため読み取れませんでした（表紙・広告などのページであれば問題ありません）。' });

@@ -7,7 +7,7 @@
  *     男子：組の行 #93C6F4 ／ 交互の行 #ECF5FF と白
  *     女子：組の行 #FFA4FD ／ 交互の行 #FFECFF と白
  *     種目の見出し：画面で切り替え
- *       green-bg   … 背景 #73E65C ＋ 文字 男子 #0B3D91・女子 #A3004F
+ *       green-bg   … 背景 #73E65C ＋ 文字 男子 #0B3D91・女子 #A3004F（初期）
  *       green-text … 背景 #6E6E6E（元のグレー）＋ 文字 #73E65C
  *   各行：氏名(学年) (所属・都道府県) ＋ 資格記録（後ろ・前・なしを選択）
  *     所属の表示は「(所属・都道府県)」と「所属(都道府県)」を画面で切り替え
@@ -79,7 +79,7 @@
         opts = opts || {};
         var qualPos = opts.qualPos || 'after';
         var teamFormat = opts.teamFormat || 'paren';
-        var greenText = opts.labelStyle === 'green-text';
+        var greenText = opts.labelStyle === 'green-text';     // 初期は緑背景＋濃い文字
         var openAll = !!opts.openAll;
         var usedIds = {};
         var out = [];

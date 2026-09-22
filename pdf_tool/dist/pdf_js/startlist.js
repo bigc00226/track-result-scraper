@@ -86,6 +86,8 @@
     function cleanName(s) {
         s = norm(s);
         s = s.replace(/\s*\(\s*/g, '(').replace(/\s*\)/g, ')');
+        // パラの知的障がいクラス「II-2」の「II-」が外字で書かれている PDF がある（〓2 → II-2）
+        s = s.replace(/^〓([1-3])(?=\s)/, 'II-$1');
         return s.replace(/\s+/g, ' ').trim();
     }
 
@@ -149,10 +151,13 @@
     function numberHeaders(line) {
         var out = [];
         line.words.forEach(function (w) {
+            // ナンバーの列の見出し：「ﾅﾝﾊﾞｰ」「Bib.」
+            if (/^(Bib|BIB|ビブ)\.?$/.test(w.t)) { out.push({ x: w.x, laneX: null, w: w }); return; }
             var t = C.hanToZenKana(w.t);
+            if (t === 'ナンバー') { out.push({ x: w.x, laneX: null, w: w }); return; }
+            // 見出しがくっついた語は「レーンナンバー」「ORDナンバー」などだけ（「ナンバーワンクラブ」などの所属名は除く）
+            if (!/^(レーン|ORD|試順|オーダー)ナンバー$/.test(t)) return;
             var i = t.indexOf('ナンバー');
-            if (i < 0) return;
-            if (i === 0 && t.length === 4) { out.push({ x: w.x, laneX: null, w: w }); return; }
             // 「ﾚｰﾝ」「ORD」「試順」などが前にくっついている場合は、文字数で位置を分ける
             var numX = w.x + (w.x2 - w.x) * (i / t.length);
             out.push({ x: numX, laneX: i > 0 ? w.x : null, w: w });
@@ -470,7 +475,7 @@
                     var r = roundOf(L, page);
                     if (r) marks.push({ type: 'round', y: L.y, idx: idx, info: r });
                 }
-                if (L.words.some(function (w) { return /^ﾅﾝﾊﾞｰ$|^ナンバー$/.test(w.t); })) marks.push({ type: 'header', y: L.y, idx: idx });
+                if (numberHeaders(L).length && L.words.some(function (w) { return /^(氏|氏名|名|競技者名)$/.test(w.t); })) marks.push({ type: 'header', y: L.y, idx: idx });
                 if (L.words.some(isLaneBox)) marks.push({ type: 'relay', y: L.y, idx: idx });
                 L.words.forEach(function (w) {
                     var m = w.t.match(HEAT_RE);
@@ -564,9 +569,22 @@
         });
         state.events = state.events.filter(function (ev) { return ev.heats.length; });
 
-        var gaijiPages = pages.filter(function (pg) { return pg.gaiji; }).map(function (pg) { return pg.num; });
-        if (gaijiPages.length) {
-            state.warnings.push({ type: 'gaiji', message: pageRanges(gaijiPages) + 'ページ目に、PDF の中で文字の情報がない特殊な文字（外字）があり、「〓」で表示しています。該当の氏名・所属を確認してください。' });
+        // 外字（〓）が残っている人を、種目名つきで知らせる
+        var gaijiList = [];
+        state.events.forEach(function (ev) {
+            ev.heats.forEach(function (h) {
+                h.entries.forEach(function (e) {
+                    var txt = [e.name, e.team, e.pref].join(' ');
+                    if (txt.indexOf('〓') >= 0) {
+                        var who = (e.name || e.team) + '（' + ev.label + '）';
+                        if (gaijiList.indexOf(who) < 0) gaijiList.push(who);
+                    }
+                });
+            });
+        });
+        if (gaijiList.length) {
+            state.warnings.push({ type: 'gaiji', message: 'PDF の中で文字の情報がない特殊な文字（外字）があり、「〓」で表示しています。手直しをお願いします：' +
+                gaijiList.slice(0, 15).join('、') + (gaijiList.length > 15 ? ' ほか' + (gaijiList.length - 15) + '件' : '') });
         }
         if (unreadable.length) {
             var nums = unreadable.map(function (u) { return u.num; });

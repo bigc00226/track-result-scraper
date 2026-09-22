@@ -111,6 +111,7 @@
 
     // 表示の選び方を、このパソコンのブラウザに覚えさせる
     var STORE_KEY = 'pdfToolOptions';
+    var STORE_VER = 2;     // 2：種目の見出しの初期を「緑背景＋濃い文字」に変更（前の選択は引き継がない）
 
     function saveOptions() {
         try {
@@ -121,6 +122,7 @@
                 if (el.type === 'radio') { if (el.checked) o[el.name] = el.value; }
                 else o[el.id] = el.checked;
             }
+            o._v = STORE_VER;
             localStorage.setItem(STORE_KEY + '.' + cfg.mode, JSON.stringify(o));
         } catch (e) { /* 使えない場合は覚えないだけ */ }
     }
@@ -130,6 +132,8 @@
             var raw = localStorage.getItem(STORE_KEY + '.' + cfg.mode);
             if (!raw) return;
             var o = JSON.parse(raw);
+            if (!o._v || o._v < 2) delete o['pdf-labelstyle'];
+            delete o._v;
             Object.keys(o).forEach(function (k) {
                 if (typeof o[k] === 'boolean') {
                     var el = document.getElementById(k);
