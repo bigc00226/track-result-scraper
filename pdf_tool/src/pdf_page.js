@@ -1,5 +1,5 @@
 /*
- * pdf_page.js  出力画面（pdf_startlist.php / pdf_result.php）の共通処理
+ * pdf_page.js  出力画面（pdf_startlist.php / pdf_result.php / pdf_timetable.php）の共通処理
  *
  *   ・トップページで選んだ PDF を受け取る（window.opener.__pdfToolFile）
  *     受け取れない場合は、この画面の「PDFを選択」から読み込めます
@@ -95,13 +95,11 @@
 
     function currentOptions() {
         var opt = {};
-        ['pdf-qualpos', 'pdf-teamformat', 'pdf-labelstyle'].forEach(function (name) {
+        var KEYS = { 'pdf-qualpos': 'qualPos', 'pdf-teamformat': 'teamFormat', 'pdf-labelstyle': 'labelStyle', 'pdf-tabstyle': 'tabStyle', 'pdf-ttsort': 'sort' };
+        Object.keys(KEYS).forEach(function (name) {
             var radios = document.querySelectorAll('input[name="' + name + '"]');
             for (var i = 0; i < radios.length; i++) {
-                if (!radios[i].checked) continue;
-                if (name === 'pdf-qualpos') opt.qualPos = radios[i].value;
-                else if (name === 'pdf-teamformat') opt.teamFormat = radios[i].value;
-                else opt.labelStyle = radios[i].value;
+                if (radios[i].checked) opt[KEYS[name]] = radios[i].value;
             }
         });
         var open = document.getElementById('pdf-openall');

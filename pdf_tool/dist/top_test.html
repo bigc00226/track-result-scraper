@@ -1,6 +1,6 @@
 <html><head><meta charset="UTF-8"><title>top test</title></head><body><table align="center" bgcolor="#333333">
 <tr><td align="center" style="padding:10px 20px;" bgcolor="#F6E3CE">
-<h2 style='font-size:x-large;'>PDF（結果・スタートリスト）</h2>
+<h2 style='font-size:x-large;'>PDF（結果・スタートリスト・タイムテーブル）</h2>
 <div style='font-size:18px;font-weight:bold;'>【結果】</div>
 <form onsubmit="return pdfToolGo(this, 'pdf_result.php', 'result');">
 <input type='file' name='pdf' accept='application/pdf,.pdf' style='font-size:large;' />
@@ -8,6 +8,11 @@
 </form>
 <div style='font-size:18px;font-weight:bold;'>【スタートリスト　info-ch用 ソースコード】</div>
 <form onsubmit="return pdfToolGo(this, 'pdf_startlist.php', 'startlist');">
+<input type='file' name='pdf' accept='application/pdf,.pdf' style='font-size:large;' />
+<input type='submit' style='font-size:x-large;' value='  GO!!  ' />
+</form>
+<div style='font-size:18px;font-weight:bold;'>【タイムテーブル】</div>
+<form onsubmit="return pdfToolGo(this, 'pdf_timetable.php', 'timetable');">
 <input type='file' name='pdf' accept='application/pdf,.pdf' style='font-size:large;' />
 <input type='submit' style='font-size:x-large;' value='  GO!!  ' />
 </form>

@@ -5,9 +5,10 @@ cd "$(dirname "$0")/.."
 rm -rf dist && mkdir -p dist/pdf_js
 cp web/pdf_startlist.php dist/
 [ -f web/pdf_result.php ] && cp web/pdf_result.php dist/
+[ -f web/pdf_timetable.php ] && cp web/pdf_timetable.php dist/
 # お客様のトップページ（PDF 欄を追加したもの。Shift_JIS）
 [ -f web/tournament_result_top.php ] && cp web/tournament_result_top.php dist/
-for f in pdfcore.js startlist.js startlist_render.js result.js result_render.js pdf_page.js; do
+for f in pdfcore.js startlist.js startlist_render.js result.js result_render.js timetable.js timetable_render.js pdf_page.js; do
   [ -f src/$f ] && cp src/$f dist/pdf_js/
 done
 # テスト用のトップページ（本番では tournament_result_top.php に snippet を追加）

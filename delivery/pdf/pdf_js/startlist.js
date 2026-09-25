@@ -34,7 +34,7 @@
 
     function roundOf(line, page) {
         if (!line.words.length || line.words[0].x > page.width * 0.35) return null;
-        var s = normWord(line.text);
+        var s = normWord(line.text).replace(/^[【\[［]([^】\]］]*)[】\]］]/, '$1');     // 「【決勝】」
         var m = s.match(ROUND_RE);
         if (!m) return null;
         var r = m[1] === 'TR決勝' ? 'タイムレース決勝' : m[1];
@@ -47,8 +47,16 @@
     function isTitle(line, page) {
         if (!line.words.length || line.words[0].x > page.width * 0.5) return false;
         if (line.fs < 13.5) return false;
-        var s = norm(line.text);
+        var s = norm(titleText(line));
         return /男|女/.test(s) && EVENT_START_RE.test(s);
+    }
+
+    // 種目名の行の文字：種目名と同じ大きさの語だけ
+    //   （右端に小さく書かれた日程「決勝13:55」「決勝 14:30」は除く）
+    function titleText(line) {
+        return line.words.filter(function (w) {
+            return w.fs >= line.fs * 0.8 && !/^(予選|準決勝|決勝|タイムレース)?\d{1,2}[:：]\d{2}$/.test(C.zenToHanAscii(w.t));
+        }).map(function (w) { return w.t; }).join(' ');
     }
 
     function parseTitle(text) {
@@ -91,10 +99,16 @@
         return s.replace(/\s+/g, ' ').trim();
     }
 
+    function withGrade(name, grade) {
+        if (!grade || /\)$/.test(name)) return name;
+        return name + '(' + grade + ')';
+    }
+
     function nameScore(text) {
         var sc = 0;
         if (/[぀-ゟ゠-ヿ一-鿿豈-﫿々〆]/.test(text)) sc += 4;   // 漢字・全角かな
         if (/^[｡-ﾟ\s()0-9*]+$/.test(text)) sc -= 2;                                     // 半角カナのみ（フリガナ）
+        if (/^[゠-ヿ\s・]+$/.test(text)) sc -= 3;                                             // 全角カタカナのみ（フリガナ）
         if (/^[A-Za-z\s()0-9.'\-*]+$/.test(text)) sc -= 1;                                        // ローマ字のみ
         if (/\(\d{1,2}\)|\([^)]*\d\)/.test(text)) sc += 1;                                         // 学年つき
         return sc;
@@ -143,9 +157,11 @@
         lane: /^(ﾚｰﾝ|レーン|ORD|試順|試|順|ｵｰﾀﾞｰ)$/,
         name: /^(氏|氏名|競技者名)$/,
         team: /^(所|所属|所属\/資格記録)$/,
-        qual: /^(資格記録|資格|前記録)$/,
+        qual: /^(資格記録|資格|前記録|参考記録|参考)$/,
         result: /順位|^1回目$|^ｺﾒﾝﾄ$/
     };
+
+    function isNameHeader(L) { return L.words.some(function (w) { return /^(氏|氏名|名|競技者名)$/.test(w.t); }); }
 
     // 見出しの語がくっついている表（「ﾚｰﾝﾅﾝﾊﾞｰ」）にも対応する
     function numberHeaders(line) {
@@ -174,7 +190,10 @@
         var blocks = numWords.map(function (nw) {
             var laneW = zoneWords.filter(function (w) { return HDR.lane.test(w.t) && w.x < nw.x && nw.x - w.x < 45; })
                 .sort(function (a, b) { return b.x - a.x; })[0];
-            return { numX: nw.x, laneX: nw.laneX !== null ? nw.laneX : (laneW ? laneW.x : nw.x - 14) };
+            // 列の中央（行の先頭の番号がレーン・試順の列か、ナンバーの列かを見分けるのに使う）
+            var numC = (nw.x + nw.w.x2) / 2;
+            var laneC = nw.laneX !== null ? (nw.w.x + nw.x) / 2 : (laneW ? (laneW.x + laneW.x2) / 2 : null);
+            return { numX: nw.x, laneX: nw.laneX !== null ? nw.laneX : (laneW ? laneW.x : nw.x - 14), numC: numC, laneC: laneC };
         }).sort(function (a, b) { return a.laneX - b.laneX; });
         blocks.forEach(function (b, i) {
             b.x0 = b.laneX - 8;
@@ -223,9 +242,15 @@
             var ws = wordsIn(L, b.x0, b.resultX);
             if (!ws.length) return;
             var w0 = ws[0];
+            // 行の先頭はレーン・試順の番号（ナンバーの列より左）。
+            //   ナンバーだけが少し上にずれて別の行になっている表では、ナンバーを先頭と間違えない
             if (!/^\d{1,3}$/.test(w0.t) || w0.x >= b.nameX - 1) return;
+            if (b.laneC !== null) {
+                var c0 = (w0.x + w0.x2) / 2;
+                if (Math.abs(c0 - b.numC) < Math.abs(c0 - b.laneC)) return;
+            }
             var bib = '';
-            if (ws[1] && ws[1].x < b.nameX - 1 && /^[0-9A-Za-z\-]+$/.test(ws[1].t)) bib = ws[1].t;
+            if (ws[1] && ws[1].x < b.nameX - 1 && /^[0-9A-Za-z\-]+$/.test(C.zenToHanAscii(ws[1].t))) bib = C.zenToHanAscii(ws[1].t);   // 「E１０１０」も
             anchors.push({ y: L.y, order: parseInt(w0.t, 10), bib: bib, w0: w0, w1: bib ? ws[1] : null });
         });
         anchors.sort(function (a, c) { return a.y - c.y; });
@@ -278,7 +303,25 @@
         rows.forEach(function (row) {
             var ws = row.words;
             var byLine = C.wordsByLine;
-            var nameWs = ws.filter(function (w) { return w.x >= b.nameStart && w.x < b.nameEnd; });
+            // 学年の列（見出しなし）：氏名と所属の間に、行の基準と同じ高さで数字だけが書かれている表
+            //   「6 187 1 西九州大学 11.60」→ 学年 1 → 氏名の後ろに (1)
+            var grade = '';
+            ws = ws.filter(function (w) {
+                if (grade || !/^(\d{1,2}|[MD]\d)$/.test(w.t) || w.x < b.nameStart || w.x >= b.teamEnd) return true;
+                if (Math.abs(w.y - row.a.y) > Math.max(w.fs, 6) * 0.35) return true;
+                grade = w.t;
+                return false;
+            });
+            // 行の先頭にナンバーがない（ナンバーだけ別の行にずれて書かれている）場合、
+            //   ナンバーの列にある語をナンバーとして、氏名には入れない（「T20」などのクラスは氏名のまま）
+            var strayBib = null;
+            if (!row.a.bib) {
+                strayBib = ws.filter(function (w) {
+                    var hw = C.zenToHanAscii(w.t), c = (w.x + w.x2) / 2;
+                    return /\d/.test(hw) && /^[0-9A-Za-z\-]+$/.test(hw) && Math.abs(c - b.numC) < Math.abs(c - b.nameX);
+                })[0] || null;
+            }
+            var nameWs = ws.filter(function (w) { return w !== strayBib && w.x >= b.nameStart && w.x < b.nameEnd; });
             var teamWs = ws.filter(function (w) { return w.x >= b.nameEnd && w.x < b.teamEnd; });
             // フリガナの続き（半角カナ）が所属の列にはみ出している場合は氏名の側に戻す
             var HK = /^[\uFF61-\uFF9F]+$/;
@@ -301,12 +344,17 @@
             qualLines.forEach(function (l) {
                 var q = squash(norm(l.text));
                 if (!t.qual && C.isRecord(q)) t.qual = q;
+                // 「11.10 ( )」のように、右の順位の欄の「( )」と同じ行になっている表は語ごとに見る
+                l.words.forEach(function (w) {
+                    var qw = squash(norm(w.t));
+                    if (!t.qual && C.isRecord(qw)) t.qual = qw;
+                });
             });
             if (!best && !t.team) return;      // 空きレーン
             entries.push({
                 order: row.a.order,
-                bib: row.a.bib,
-                name: best ? cleanName(best.text) : '',
+                bib: row.a.bib || (strayBib ? C.zenToHanAscii(strayBib.t) : ''),
+                name: best ? withGrade(cleanName(best.text), grade) : '',
                 team: t.team,
                 pref: t.pref,
                 qual: t.qual,
@@ -320,7 +368,16 @@
     // ---------------------------------------------------------------
     // (2) リレーの枠形式
     // ---------------------------------------------------------------
-    function isLaneBox(w) { return /^\d{1,2}(ﾚｰﾝ|レーン)$/.test(w.t); }
+    //   レーンの枠は「3ﾚｰﾝ」または丸数字「③」
+    var CIRCLED = '①②③④⑤⑥⑦⑧⑨⑩';
+    function isLaneBox(w) { return /^\d{1,2}(ﾚｰﾝ|レーン)$/.test(w.t) || (w.t.length === 1 && CIRCLED.indexOf(w.t) >= 0); }
+    function laneNo(t) { var k = CIRCLED.indexOf(t); return k >= 0 ? k + 1 : parseInt(t, 10); }
+    // リレーの枠の行：丸数字の場合は、行の先頭が丸数字で 2つ以上並んでいるもの（本文の「①」は除く）
+    function isRelayLine(L) {
+        if (L.words.some(function (w) { return /^\d{1,2}(ﾚｰﾝ|レーン)$/.test(w.t); })) return true;
+        var c = L.words.filter(isLaneBox);
+        return c.length >= 2 && c[0] === L.words[0];
+    }
 
     function parseRelayLine(page, L) {
         var boxes = L.words.filter(isLaneBox);
@@ -342,7 +399,7 @@
                 if (k > 0 && k <= 4) { pref = squash(team).slice(0, k); team = team.replace(/^[^・]*・\s*/, ''); }
             }
             return {
-                order: parseInt(bw.t, 10), bib: '', name: '', team: team, pref: pref, qual: qual, relay: true,
+                order: laneNo(bw.t), bib: '', name: '', team: team, pref: pref, qual: qual, relay: true,
                 x: bw.x, y: L.y
             };
         }).filter(function (e) { return e.team; });
@@ -470,15 +527,17 @@
             // ページの中の区切り行（種目名・ラウンド・組・ヘッダー）
             var marks = [];
             lines.forEach(function (L, idx) {
-                if (isTitle(L, page)) marks.push({ type: 'title', y: L.y, idx: idx, info: parseTitle(L.text) });
+                if (isTitle(L, page)) marks.push({ type: 'title', y: L.y, idx: idx, info: parseTitle(titleText(L)) });
                 else {
                     var r = roundOf(L, page);
                     if (r) marks.push({ type: 'round', y: L.y, idx: idx, info: r });
                 }
-                if (numberHeaders(L).length && L.words.some(function (w) { return /^(氏|氏名|名|競技者名)$/.test(w.t); })) marks.push({ type: 'header', y: L.y, idx: idx });
-                if (L.words.some(isLaneBox)) marks.push({ type: 'relay', y: L.y, idx: idx });
+                // 見出しの行：ナンバーの列と氏名の列がある行
+                //（「氏名」にフリガナ「シメイ」が付いていて、少し下の別の行になっている表もある）
+                if (numberHeaders(L).length && lines.some(function (L2) { return Math.abs(L2.y - L.y) <= 6 && isNameHeader(L2); })) marks.push({ type: 'header', y: L.y, idx: idx });
+                if (isRelayLine(L)) marks.push({ type: 'relay', y: L.y, idx: idx });
                 L.words.forEach(function (w) {
-                    var m = w.t.match(HEAT_RE);
+                    var m = C.zenToHanAscii(w.t).match(HEAT_RE);
                     if (m) marks.push({ type: 'heat', y: L.y, x: w.x, no: parseInt(m[1], 10) });
                 });
                 if (/^(凡例|ラップ表|ﾗｯﾌﾟ表)/.test(squash(L.text))) marks.push({ type: 'end', y: L.y });

@@ -211,7 +211,8 @@ echo "\r\n<tr><td align=\"center\" style=\"padding:10px 20px;\" bgcolor=\"#F6E3C
 // PDF をブラウザの中で読み取ります（サーバには送信しません）
 //   【結果】        → pdf_result.php（1.php と同じ一覧表）
 //   【スタートリスト】→ pdf_startlist.php（info-ch 用の HTML）
-echo "<h2 style='font-size:x-large;'>PDF（結果・スタートリスト）</h2>\r\n";
+//   【タイムテーブル】→ pdf_timetable.php（HTML の表）
+echo "<h2 style='font-size:x-large;'>PDF（結果・スタートリスト・タイムテーブル）</h2>\r\n";
 echo "<div style='font-size:18px;font-weight:bold;'>【結果】</div>\r\n";
 echo "<form onsubmit=\"return pdfToolGo(this, 'pdf_result.php', 'result');\">\r\n";
 echo "<input type='file' name='pdf' accept='application/pdf,.pdf' style='font-size:large;' />\r\n";
@@ -220,6 +221,12 @@ echo "</form>\r\n";
 
 echo "<div style='font-size:18px;font-weight:bold;'>【スタートリスト　info-ch用 ソースコード】</div>\r\n";
 echo "<form onsubmit=\"return pdfToolGo(this, 'pdf_startlist.php', 'startlist');\">\r\n";
+echo "<input type='file' name='pdf' accept='application/pdf,.pdf' style='font-size:large;' />\r\n";
+echo "<input type='submit' style='font-size:x-large;' value='  GO!!  ' />\r\n";
+echo "</form>\r\n";
+
+echo "<div style='font-size:18px;font-weight:bold;'>【タイムテーブル】</div>\r\n";
+echo "<form onsubmit=\"return pdfToolGo(this, 'pdf_timetable.php', 'timetable');\">\r\n";
 echo "<input type='file' name='pdf' accept='application/pdf,.pdf' style='font-size:large;' />\r\n";
 echo "<input type='submit' style='font-size:x-large;' value='  GO!!  ' />\r\n";
 echo "</form>\r\n";

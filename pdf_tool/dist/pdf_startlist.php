@@ -165,6 +165,12 @@ jQuery(function($){
 <div class="row">
 <label><input type="checkbox" id="pdf-openall" checked> 最初から全種目を開いた状態にする</label>
 </div>
+<div class="row">種目の見出しの形式：
+<label><input type="radio" name="pdf-tabstyle" value="checkbox" checked> NISHIと同じ</label>
+<label><input type="radio" name="pdf-tabstyle" value="details"> サイトのCSSがなくても開閉できる形式</label>
+<label><input type="radio" name="pdf-tabstyle" value="plain"> 開閉なし（表だけ）</label>
+<div style="font-size:13px;color:#666666;">貼り付けたサイトで「開閉できない・＋が出ない・文字が細い」場合は、「開閉なし（表だけ）」でコピーすると、どのサイトでもそのまま表示できます。</div>
+</div>
 <div class="row" id="pdf-status"></div>
 <div id="pdf-warn"></div>
 </div>
@@ -173,10 +179,10 @@ jQuery(function($){
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
-<script src="pdf_js/pdfcore.js?v=4"></script>
-<script src="pdf_js/startlist.js?v=4"></script>
-<script src="pdf_js/startlist_render.js?v=4"></script>
-<script src="pdf_js/pdf_page.js?v=4"></script>
+<script src="pdf_js/pdfcore.js?v=7"></script>
+<script src="pdf_js/startlist.js?v=7"></script>
+<script src="pdf_js/startlist_render.js?v=7"></script>
+<script src="pdf_js/pdf_page.js?v=7"></script>
 <script>
 PdfPage.init({
     mode: 'startlist',

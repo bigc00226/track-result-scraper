@@ -1,4 +1,4 @@
-// ブラウザでの動作確認: node tools/e2e.js <mode> <pdf> [screenshot.png]
+// ブラウザでの動作確認: node tools/e2e.js <result|startlist|timetable> <pdf> [screenshot.png]
 //   トップページ(テスト用)で PDF を選んで GO!! → 新しいタブで読み取り → コピーを確認
 const { chromium } = require('playwright-core');
 const path = require('path');
@@ -12,7 +12,7 @@ const path = require('path');
   page.on('pageerror', e => errors.push(e.message));
   const top = process.env.TOP || 'top_test.html';
   await page.goto('http://127.0.0.1:8765/' + top);
-  const formSel = mode === 'result' ? 'form[onsubmit*="pdf_result.php"]' : 'form[onsubmit*="pdf_startlist.php"]';
+  const formSel = `form[onsubmit*="pdf_${mode}.php"]`;
   await page.setInputFiles(`${formSel} input[type=file]`, path.resolve(pdf));
   const [out] = await Promise.all([ctx.waitForEvent('page'), page.click(`${formSel} input[type=submit]`)]);
   out.on('dialog', d => d.accept());

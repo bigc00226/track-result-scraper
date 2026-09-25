@@ -12,6 +12,11 @@
  *   各行：氏名(学年) (所属・都道府県) ＋ 資格記録（後ろ・前・なしを選択）
  *     所属の表示は「(所属・都道府県)」と「所属(都道府県)」を画面で切り替え
  *   種目は最初から開いた状態にもできます（画面で切り替え）
+ *   見出しの形式（画面で切り替え）
+ *     checkbox … NISHI 下段と同じ（サイト側の CSS で開閉・「＋」を表示）
+ *     details  … <details> を使い、色・枠・太さを HTML に直接書く
+ *                （貼り付け先の CSS が効かない・チェックボックスが消えるサイト用）
+ *     plain    … 開閉なし。種目名も表の 1行目にした、ただの表（どのサイトでも表示できる）
  */
 (function (root, factory) {
     if (typeof module === 'object' && module.exports) {
@@ -70,9 +75,15 @@
         return s.join(' ');
     }
 
+    // 見出し（種目名）の体裁。貼り付け先の CSS が効かなくても同じ見た目になるように書く
+    var LABEL_STYLE = 'font-weight:bold;line-height:3;position:relative;display:block;padding:0 0 0 1em;margin:0 0 1px 0;cursor:pointer;';
+    // <summary> は display:block にすると開閉の印（▶）が消えるので、そのままにする
+    var SUMMARY_STYLE = LABEL_STYLE.replace('display:block;', '');
+    var TD_STYLE = 'border:1px solid #555555;padding:5px;';
+
     /**
      * events : StartList.parse() の events
-     * opts   : { qualPos: 'after' | 'before' | 'none' }
+     * opts   : { qualPos: 'after'|'before'|'none', teamFormat, labelStyle, openAll, tabStyle }
      * 戻り値 : .ex-box の中に入れる HTML
      */
     function render(events, opts) {
@@ -81,41 +92,60 @@
         var teamFormat = opts.teamFormat || 'paren';
         var greenText = opts.labelStyle === 'green-text';     // 初期は緑背景＋濃い文字
         var openAll = !!opts.openAll;
+        var details = opts.tabStyle === 'details';            // 初期は NISHI と同じチェックボックス
+        var plain = opts.tabStyle === 'plain';
         var usedIds = {};
         var out = [];
         events.forEach(function (ev) {
             var pal = palette(ev.gender);
             var id = ev.label.replace(/\s+/g, '');
             if (usedIds[id]) { usedIds[id]++; id += '_' + usedIds[id]; } else usedIds[id] = 1;
+            var labelStyle = 'color:' + (greenText ? GREEN : pal.label) + ';background-color:' + (greenText ? GRAY : GREEN) + ';';
 
-            out.push('<div class="cp_actab">');
-            out.push('<input id="' + esc(id) + '" type="checkbox" name="tabs"' + (openAll ? ' checked' : '') + '>');
-            out.push('<label for="' + esc(id) + '" style="color:' + (greenText ? GREEN : pal.label) +
-                ';background-color:' + (greenText ? GRAY : GREEN) + ';">' + esc(ev.label) + '</label>');
-            out.push('<div class="cp_actab-content">');
-            out.push('');
-            out.push('<table class="s-tbl2" width="100%" style="width:100%;">');
+            // 開閉なし（plain）は外側の枠を付けず、見出しを表の 1行目にする
+            if (details) {
+                out.push('<details class="cp_actab"' + (openAll ? ' open' : '') + ' style="width:100%;margin:0 auto;">');
+                out.push('<summary style="' + labelStyle + SUMMARY_STYLE + '">' + esc(ev.label) + '</summary>');
+                out.push('<div class="cp_actab-content" style="color:#333333;background:#FFFFFF;">');
+            } else if (!plain) {
+                out.push('<div class="cp_actab">');
+                out.push('<input id="' + esc(id) + '" type="checkbox" name="tabs"' + (openAll ? ' checked' : '') + '>');
+                out.push('<label for="' + esc(id) + '" style="' + labelStyle + LABEL_STYLE + '">' + esc(ev.label) + '</label>');
+                out.push('<div class="cp_actab-content">');
+            }
+            if (!plain) out.push('');
+            var own = details || plain;      // 色・枠を HTML に直接書く形式
+            out.push('<table class="s-tbl2" width="100%" style="width:100%;' + (own ? 'border-collapse:collapse;table-layout:fixed;word-wrap:break-word;' : '') +
+                (plain ? 'margin:0 0 12px 0;' : '') + '">');
+            var td = own ? TD_STYLE : '';
+            if (plain) {
+                out.push('<tr>');
+                out.push('<td style="' + TD_STYLE + labelStyle + 'font-weight:bold;padding:8px 12px;" width="100%" bgcolor="' + (greenText ? GRAY : GREEN) + '">' + esc(ev.label) + '</td>');
+                out.push('</tr>');
+            }
             var rowNo = 0;          // 表の中の行番号（組の行も数える）
             ev.heats.forEach(function (h) {
                 rowNo++;
                 var t = heatTitle(ev, h);
                 out.push('<tr>');
-                out.push('<td style="color:#000000;text-align:center;" width="100%" bgcolor="' + pal.head + '">');
+                out.push('<td style="' + td + 'color:#000000;text-align:center;" width="100%" bgcolor="' + pal.head + '">');
                 out.push('<span style="color:' + TITLE_COLOR + ';font-weight:bold;">スタートリスト</span>' + (t ? ' ' + esc(t) : ''));
                 out.push('</td>');
                 out.push('</tr>');
                 h.entries.forEach(function (e) {
                     rowNo++;
                     out.push('<tr>');
-                    out.push('<td bgcolor="' + (rowNo % 2 === 0 ? pal.light : WHITE) + '">');
+                    out.push('<td' + (td ? ' style="' + td + '"' : '') + ' bgcolor="' + (rowNo % 2 === 0 ? pal.light : WHITE) + '">');
                     out.push(esc(entryText(e, qualPos, teamFormat)));
                     out.push('</td>');
                     out.push('</tr>');
                 });
             });
             out.push('</table>');
-            out.push('</div>');
-            out.push('</div>');
+            if (!plain) {
+                out.push('</div>');
+                out.push(details ? '</details>' : '</div>');
+            }
         });
         return out.join('\r\n') + '\r\n';
     }

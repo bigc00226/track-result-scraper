@@ -538,14 +538,16 @@
     }
 
     // 表の見出しの下端：見出しの語だけでできている行（2～3行に分かれた見出しも含む）の一番下
-    var HEADER_WORD = /^(ﾚｰﾝ|レーン|ORD|試|順|試順|ﾅﾝﾊﾞｰ|ナンバー|ﾚｰﾝﾅﾝﾊﾞｰ|Bib\.?|BIB\.?|氏|名|氏名|所|属|所属|資格|記録|資格記録|前記録|参考記録|順位|ｺﾒﾝﾄ|コメント|通過|得点|ﾁｰﾑ|ｵｰﾀﾞｰ|ｶﾅ|3回|3回まで|4回以降|の最高|の試技順|ﾍﾞｽﾄ|ﾄｯﾌﾟ8|総合|[1-6]回目|風|.*\/(資格|参考)記録|順位\(ﾅﾝﾊﾞｰ\)記録|\(順位\)記録)$/;
+    var HEADER_WORD = /^(ﾚｰﾝ|レーン|ORD|試|順|試順|試技|ﾅﾝﾊﾞｰ|ナンバー|ﾚｰﾝﾅﾝﾊﾞｰ|Bib\.?|BIB\.?|No\.?|NO\.?|№|氏|名|氏名|所|属|所属|所属名|資格|記録|資格記録|前記録|参考記録|記録\s*[／/]\s*備考|備考|順位|ｺﾒﾝﾄ|コメント|通過|得点|ﾁｰﾑ|ｵｰﾀﾞｰ|ｶﾅ|3回|3回まで|4回以降|の最高|最高記録|の試技順|ﾍﾞｽﾄ|ﾄｯﾌﾟ8|総合|[1-6]回目|-[1-9]-|風|.*\/(資格|参考)記録|順位\(ﾅﾝﾊﾞｰ\)記録|\(順位\)記録)$/;
 
     function headerBottom(zone, hdrLine, x0, x1) {
         var y = hdrLine.y;
         zone.forEach(function (L) {
             var ws = L.words.filter(function (w) { return w.x >= x0 && w.x < x1; });
             if (!ws.length) return;
-            var hdr = ws.filter(function (w) { return HEADER_WORD.test(w.t); }).length;
+            // 高さの見出し（「順 4m50 4m60」の 2段目）も見出しの語。ただし氏名などがある行（1人目の記録）は除く
+            var hasText = ws.some(function (w) { return !HEADER_WORD.test(w.t) && /[぀-ヿ一-鿿]/.test(w.t); });
+            var hdr = ws.filter(function (w) { return HEADER_WORD.test(w.t) || (!hasText && /^\d{1,2}m\d{2}$/.test(w.t)); }).length;
             if (hdr >= Math.max(1, ws.length * 0.6) && L.y > y) y = L.y;
         });
         return y;
