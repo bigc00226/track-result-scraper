@@ -179,10 +179,10 @@ jQuery(function($){
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
-<script src="pdf_js/pdfcore.js?v=7"></script>
-<script src="pdf_js/startlist.js?v=7"></script>
-<script src="pdf_js/startlist_render.js?v=7"></script>
-<script src="pdf_js/pdf_page.js?v=7"></script>
+<script src="pdf_js/pdfcore.js?v=8"></script>
+<script src="pdf_js/startlist.js?v=8"></script>
+<script src="pdf_js/startlist_render.js?v=8"></script>
+<script src="pdf_js/pdf_page.js?v=8"></script>
 <script>
 PdfPage.init({
     mode: 'startlist',

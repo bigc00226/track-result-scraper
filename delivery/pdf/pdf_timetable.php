@@ -73,8 +73,13 @@ jQuery(function($){
 <div class="row"><b>タイムテーブル（PDF）</b>　<span id="pdf-filename"></span></div>
 <div class="row">PDFを選択：<input type="file" id="pdf-file" accept="application/pdf,.pdf"></div>
 <div class="row">並び順：
-<label><input type="radio" name="pdf-ttsort" value="time" checked> 時刻順（トラック・フィールドをまとめる）</label>
+<label><input type="radio" name="pdf-ttsort" value="time" checked> 時刻順</label>
 <label><input type="radio" name="pdf-ttsort" value="pdf"> PDFの順番</label>
+</div>
+<div class="row">区分の行：
+<label><input type="radio" name="pdf-ttsection" value="jt" checked> ●トラック・●跳躍・●投てき</label>
+<label><input type="radio" name="pdf-ttsection" value="field"> ●トラック・●フィールド</label>
+<label><input type="radio" name="pdf-ttsection" value="none"> 入れない</label>
 </div>
 <div class="row" id="pdf-status"></div>
 <div id="pdf-warn"></div>
@@ -84,10 +89,10 @@ jQuery(function($){
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
-<script src="pdf_js/pdfcore.js?v=7"></script>
-<script src="pdf_js/timetable.js?v=7"></script>
-<script src="pdf_js/timetable_render.js?v=7"></script>
-<script src="pdf_js/pdf_page.js?v=7"></script>
+<script src="pdf_js/pdfcore.js?v=8"></script>
+<script src="pdf_js/timetable.js?v=8"></script>
+<script src="pdf_js/timetable_render.js?v=8"></script>
+<script src="pdf_js/pdf_page.js?v=8"></script>
 <script>
 PdfPage.init({
     mode: 'timetable',

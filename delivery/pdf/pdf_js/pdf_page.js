@@ -95,7 +95,7 @@
 
     function currentOptions() {
         var opt = {};
-        var KEYS = { 'pdf-qualpos': 'qualPos', 'pdf-teamformat': 'teamFormat', 'pdf-labelstyle': 'labelStyle', 'pdf-tabstyle': 'tabStyle', 'pdf-ttsort': 'sort' };
+        var KEYS = { 'pdf-qualpos': 'qualPos', 'pdf-teamformat': 'teamFormat', 'pdf-labelstyle': 'labelStyle', 'pdf-tabstyle': 'tabStyle', 'pdf-ttsort': 'sort', 'pdf-ttsection': 'section' };
         Object.keys(KEYS).forEach(function (name) {
             var radios = document.querySelectorAll('input[name="' + name + '"]');
             for (var i = 0; i < radios.length; i++) {
