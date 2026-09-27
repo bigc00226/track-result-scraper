@@ -89,10 +89,10 @@ jQuery(function($){
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
-<script src="pdf_js/pdfcore.js?v=8"></script>
-<script src="pdf_js/timetable.js?v=8"></script>
-<script src="pdf_js/timetable_render.js?v=8"></script>
-<script src="pdf_js/pdf_page.js?v=8"></script>
+<script src="pdf_js/pdfcore.js?v=9"></script>
+<script src="pdf_js/timetable.js?v=9"></script>
+<script src="pdf_js/timetable_render.js?v=9"></script>
+<script src="pdf_js/pdf_page.js?v=9"></script>
 <script>
 PdfPage.init({
     mode: 'timetable',

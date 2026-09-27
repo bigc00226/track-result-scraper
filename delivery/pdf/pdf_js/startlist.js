@@ -125,7 +125,8 @@
             if (/^[+\-±]?\d{1,2}\.\d$/.test(sq)) return;            // 風
             if (C.isRecord(sq)) { if (!qual) qual = sq; return; }
             // 風の記号（「+」「-」「+･-」）が所属の右に並ぶ表があるので、前後の記号を取り除く
-            t = norm(t).replace(/[\s+\-±･・.]+$/, '').replace(/^[\s+\-±･・]+/, '');
+            t = norm(t).replace(/[\s+\-±･・.\/／]+$/, '').replace(/^[\s+\-±･・\/／]+/, '');
+            t = t.replace(/(\s+[mｍ])+$/, '');                      // 跳躍の記録の欄の単位「m」
             sq = squash(t);
             if (!sq) return;
             var nt = norm(t), ki = nt.indexOf('・');
@@ -536,9 +537,15 @@
                 //（「氏名」にフリガナ「シメイ」が付いていて、少し下の別の行になっている表もある）
                 if (numberHeaders(L).length && lines.some(function (L2) { return Math.abs(L2.y - L.y) <= 6 && isNameHeader(L2); })) marks.push({ type: 'header', y: L.y, idx: idx });
                 if (isRelayLine(L)) marks.push({ type: 'relay', y: L.y, idx: idx });
-                L.words.forEach(function (w) {
+                L.words.forEach(function (w, wi) {
                     var m = C.zenToHanAscii(w.t).match(HEAT_RE);
                     if (m) marks.push({ type: 'heat', y: L.y, x: w.x, no: parseInt(m[1], 10) });
+                    // 跳躍・投てきのピットごとの組「Group A」「A組」→ A組（1組）・B組（2組）
+                    var g = null, ht = C.zenToHanAscii(w.t);
+                    if (/^Group$/i.test(ht) && L.words[wi + 1] && /^[A-Z]$/.test(C.zenToHanAscii(L.words[wi + 1].t))) g = C.zenToHanAscii(L.words[wi + 1].t);
+                    else if (/^Group([A-Z])$/i.test(ht)) g = ht.slice(-1).toUpperCase();
+                    else if (/^[A-Z]組$/.test(ht) && w.x < page.width * 0.6) g = ht.charAt(0);
+                    if (g) marks.push({ type: 'heat', y: L.y, x: w.x, no: g.charCodeAt(0) - 64, tag: g });
                 });
                 if (/^(凡例|ラップ表|ﾗｯﾌﾟ表)/.test(squash(L.text))) marks.push({ type: 'end', y: L.y });
             });
@@ -587,7 +594,22 @@
                         }).sort(function (a, c) { return c.y - a.y; })[0];
                         var col = collectBlock(page, b, region);
                         if (!col.anchors.length) return;
-                        pending.push({ b: b, col: col, heat: getHeat(ev, label ? label.no : 0), topY: b.hdrY + 1, bottomY: stopY });
+                        // 最初・最後の空きレーン（レーン番号だけの行）は、1人分の範囲を決めるときに使わない
+                        //   （フリガナ・都道府県が名前の行の上にある表で、空きレーンの下の行を、次のレーンのものと分かるように）
+                        var topY = b.hdrY + 1, bottomY = stopY;
+                        //   空きレーン：ナンバーがなく、レーン番号の行とそのすぐ上下（行の間隔の 3割以内）に何も書かれていない
+                        var ys = col.anchors.map(function (a) { return a.y; }), gaps = [];
+                        for (var gi = 1; gi < ys.length; gi++) gaps.push(ys[gi] - ys[gi - 1]);
+                        gaps.sort(function (p, q) { return p - q; });
+                        var near = Math.max(4, (gaps.length ? gaps[Math.floor(gaps.length / 2)] : 18) * 0.3);
+                        var isEmpty = function (a) {
+                            return !a.w1 && !region.some(function (L) {
+                                return Math.abs(L.y - a.y) < near && L.words.some(function (w) { return w !== a.w0 && w.x >= b.x0 && w.x < b.resultX; });
+                            });
+                        };
+                        while (col.anchors.length > 1 && isEmpty(col.anchors[0])) topY = col.anchors.shift().y + 1;
+                        while (col.anchors.length > 1 && isEmpty(col.anchors[col.anchors.length - 1])) bottomY = col.anchors.pop().y - 1;
+                        pending.push({ b: b, col: col, heat: getHeat(ev, label ? label.no : 0, label ? label.tag : ''), topY: topY, bottomY: bottomY });
                     });
                 } else if (m.type === 'relay') {
                     var label2 = heatLabels.filter(function (h) { return h.y < m.y && h.y > sectionY; })

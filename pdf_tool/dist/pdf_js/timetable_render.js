@@ -23,7 +23,10 @@
     var SECTION_BG = '#73E65C';       // 区分の行（スタートリストの種目の見出しと同じ緑）
     var TD = 'border:1px solid #999999;padding:5px 4px;';
     var NOWRAP = 'white-space:nowrap;';
-    var WRAP = 'overflow-wrap:anywhere;';     // 「110mH(0.991m/9.14m)」のような長い語も、画面の幅で折り返す
+    var WRAP = 'overflow-wrap:anywhere;';     // 種別・ラウンド：画面の幅で折り返す
+    var EV_WRAP = 'overflow-wrap:break-word;'; // 種目：「10000m」は途中で折り返さない
+    // 種目名の「(」の前と「/」の後ろで折り返せるようにする（「110mH(0.991m/9.14m)」）。見えない文字（U+200B）
+    function breakable(t) { return t.replace(/\(/g, '\u200B(').replace(/\//g, '/\u200B'); }
 
     function esc(s) {
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -92,7 +95,9 @@
                     var bg = ROW_COLORS[i % 2];
                     out.push('<tr>');
                     cols.forEach(function (c) {
-                        out.push('<td style="' + TD + (c.center ? 'text-align:center;' : '') + (c.nowrap ? NOWRAP : WRAP) + '" bgcolor="' + bg + '">' + esc(r[c.key] || '') + '</td>');
+                        var v = r[c.key] || '';
+                        var wrap = c.nowrap ? NOWRAP : (c.key === 'event' ? EV_WRAP : WRAP);
+                        out.push('<td style="' + TD + (c.center ? 'text-align:center;' : '') + wrap + '" bgcolor="' + bg + '">' + esc(c.key === 'event' ? breakable(v) : v) + '</td>');
                     });
                     out.push('</tr>');
                 });
