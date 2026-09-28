@@ -17,7 +17,7 @@ done
 for f in ../lanp2/time-table.pdf "../lanp2/lanp2_2/タイムテーブル①.pdf" "../lanp2/lanp2_2/タイムテーブル②＿スタートリスト.pdf" \
          "../lanp2/lanp2_2/タイムテーブル③.pdf" "../lanp2/lanp2_9/2026小郡陸上プログラムVol.4.pdf" \
          "../lanp2/lanp2_2/スタートリスト②.pdf" "../lanp2/lanp2_2/スタートリスト③.pdf" \
-         ../lanp2/lanp2_10/*.pdf ../lanp2/lanp2_11/*.pdf ../lanp2/lanp2_12/*.pdf; do
+         ../lanp2/lanp2_10/*.pdf ../lanp2/lanp2_11/*.pdf ../lanp2/lanp2_12/*.pdf ../lanp2/lanp2_13/*.pdf; do
   node tools/run_timetable.js "$f" 2>&1 | grep -Ev "$F" | grep "^#\|^  !"
 done
 node tools/run_result.js ../lanp2/results.pdf out/ih_pdf.tsv > /dev/null 2>&1
