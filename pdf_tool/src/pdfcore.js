@@ -547,7 +547,11 @@
             if (!ws.length) return;
             // 高さの見出し（「順 4m50 4m60」の 2段目）も見出しの語。ただし氏名などがある行（1人目の記録）は除く
             var hasText = ws.some(function (w) { return !HEADER_WORD.test(w.t) && /[぀-ヿ一-鿿]/.test(w.t); });
-            var hdr = ws.filter(function (w) { return HEADER_WORD.test(w.t) || (!hasText && /^\d{1,2}m\d{2}$/.test(w.t)); }).length;
+            //   高さの見出しは左から高くなる。同じ記録がある行（「5m63 5m71 5m71」＝試技と記録）は 1人目の記録の行
+            var marks = ws.filter(function (w) { return /^\d{1,2}m\d{2}$/.test(w.t); }).sort(function (p, q) { return p.x - q.x; })
+                .map(function (w) { var m = w.t.match(/^(\d{1,2})m(\d{2})$/); return parseInt(m[1], 10) * 100 + parseInt(m[2], 10); });
+            var rising = marks.every(function (v, i) { return i === 0 || v > marks[i - 1]; });
+            var hdr = ws.filter(function (w) { return HEADER_WORD.test(w.t) || (!hasText && rising && /^\d{1,2}m\d{2}$/.test(w.t)); }).length;
             if (hdr >= Math.max(1, ws.length * 0.6) && L.y > y) y = L.y;
         });
         return y;

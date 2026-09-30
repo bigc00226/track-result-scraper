@@ -111,7 +111,7 @@
         if (!s) return '';
         s = s.replace(/(\d)m(\d)/, '$1.$2').replace(/:/g, '.');
         if (ev && /^(?:(?:100|110|200|300|400)M(?:[A-Z]{0,2}H)?|4×100MR)$/.test(ev)) {
-            var m = s.match(/^(\d+)\.(\d{2})\.(\d{2})$/);
+            var m = s.match(/^(\d+)\.(\d{2})\.(\d{1,2})$/);
             if (m) s = (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) + '.' + m[3];
         }
         return s;
@@ -128,6 +128,8 @@
     var RE_STATUS = /^(DNS|DNF|DQ|DSQ|NM|NR)(?![A-Z])/;
     var RE_WIND = /^[+\-±]?\d{1,2}\.\d$/;
     var RE_TRACKREC = /^(\d{1,2}[:.])?\d{1,2}[.:]\d{2}$|^\d{1,2}\.\d{2}$|^\d{1,2}:\d{2}\.\d{2}$/;
+    // 手動計時（1/10秒）の記録「11.5」「2:05.2」「16:23.4」
+    var RE_TRACKREC10 = /^(\d{1,2}:)?\d{1,2}\.\d$/;
     var RE_FIELDREC = /^\d{1,2}m\d{2}$/;
     var RE_POINTS = /^\d{3,5}$/;
 
@@ -454,9 +456,18 @@
                 if (n > modeN) { modeN = n; modeX = +k; }
             });
             b.teamStart = b.teamX - 3;
+            // 所属の見出し（「所 属」）の位置から所属が書かれている表（所属が空欄の人がいても、見出しの位置を使う）
+            //   （見出しが列の左端に書かれている表だけ：氏名も見出しの「氏」の位置から書かれている）
+            var atHdr = anchors.filter(function (a) { return a.line.words.some(function (w) { return w !== a.bib && Math.abs(w.x - b.teamX) <= 3; }); }).length;
+            var shift = nameShift(anchors, b);
+            var hdrAligned = shift <= 4 && atHdr >= Math.max(2, anchors.length * 0.3);
             if (modeX !== null && modeN >= Math.max(2, anchors.length * 0.3) && modeX - 1.5 < b.teamStart && modeX - 1.5 > b.nameStart + 8) {
                 b.teamStart = modeX - 1.5;
-            } else {
+            } else if (!hdrAligned && anchors.length < 3 && shift > 6) {
+                // 人数が少ない表で、氏名が見出し（「氏 名」）より左から書かれている：所属も見出しより同じだけ左から
+                var tx = b.teamX - shift - 3;
+                if (tx > b.nameStart + 8) b.teamStart = Math.min(b.teamStart, tx);
+            } else if (!hdrAligned) {
                 // 都道府県がない表：見出し（「所属名」）が列の中央に書かれていることがあるので、
                 // 各行の語がそろって始まる位置のうち、いちばん右のものを所属の始まりにする
                 //（氏名の列も同じようにそろうが、所属はその右にある）
@@ -477,6 +488,15 @@
             }
         }
         return { anchors: anchors, others: others };
+    }
+
+    // 氏名の書き始めが、見出しの「氏」よりどれだけ左か
+    function nameShift(anchors, b) {
+        var xs = anchors.map(function (a) {
+            var ws = a.line.words.filter(function (w) { return w !== a.bib && a.left.indexOf(w) < 0 && w.x >= b.nameStart && w.x < b.nameX + 40; });
+            return ws.length ? Math.min.apply(null, ws.map(function (w) { return w.x; })) : null;
+        }).filter(function (x) { return x !== null; });
+        return xs.length ? b.nameX - Math.min.apply(null, xs) : 0;
     }
 
     function blockRows(page, b, anchors, bands, kind) {
@@ -502,12 +522,14 @@
                 var m = C.zenToHanAscii(w.t).toUpperCase().match(RE_STATUS);
                 if (m && !r.status) r.status = m[1];
             });
+            // 失格の規則番号だけが書かれている（「*R3」「*T9」：凡例に失格の理由）→ DQ
+            if (!r.status && stCands.some(function (w) { return /^\*[A-Z]{1,2}\d/.test(C.zenToHanAscii(w.t)); })) r.status = 'DQ';
 
             if (b.relay) {
                 r.team = a.team.map(function (w) { return w.t; }).join(' ');
                 wordsIn(a.line, recX0 !== null ? recX0 : b.x0, recX1).forEach(function (w) {
                     var rt = dropThousandths(C.zenToHanAscii(w.t));
-                    if (!r.rec && RE_TRACKREC.test(rt)) r.rec = rt;
+                    if (!r.rec && (RE_TRACKREC.test(rt) || RE_TRACKREC10.test(rt))) r.rec = rt;
                 });
                 out.push(r);
                 return;
@@ -598,7 +620,8 @@
                 });
             } else if (recX0 !== null) {
                 var inRec = own.filter(function (w) { return w.x >= recX0 && w.x < recX1; })
-                    .sort(function (p, q) { return Math.abs(p.y - a.y) - Math.abs(q.y - a.y); });
+                    .sort(function (p, q) { return Math.abs(p.y - a.y) - Math.abs(q.y - a.y) || p.x - q.x; });
+                var slash = false, rec10 = '';
                 inRec.forEach(function (w) {
                     var t = dropThousandths(C.zenToHanAscii(w.t));
                     if (kind === 'konsei') {
@@ -609,9 +632,18 @@
                         if (!r.rec && (RE_FIELDREC.test(t) || /^\d{1,2}\.\d{2}$/.test(t))) r.rec = t;
                     } else {
                         if (Math.abs(w.y - a.y) > Math.max(w.fs, 6) * 0.5) return;      // 反応時間などは別の行
+                        // 記録と風が 1つの語「11.95/-0.5」「14.89(+0.2)」、または「11.87/」「-1.6」と分かれている
+                        var rw = t.match(/^(.+?)(?:\/([+\-±]?\d{1,2}\.\d)?|\(([+\-±]?\d{1,2}\.\d)\))$/);
+                        if (rw && (RE_TRACKREC.test(rw[1]) || RE_TRACKREC10.test(rw[1]))) {
+                            if (!r.rec) { r.rec = rw[1]; if (rw[2] || rw[3]) r.wind = r.wind || rw[2] || rw[3]; else slash = true; }
+                            return;
+                        }
+                        if (slash && !r.wind && /^[+\-±]?\d{1,2}\.\d$/.test(t)) { r.wind = t; return; }
                         if (!r.rec && RE_TRACKREC.test(t)) r.rec = t;
+                        else if (!r.rec && !rec10 && RE_TRACKREC10.test(t)) rec10 = t;
                     }
                 });
+                if (!r.rec && rec10) r.rec = rec10;           // 1/100秒の記録がない場合だけ 1/10秒の記録
             }
             out.push(r);
         });
@@ -652,13 +684,68 @@
         return [{ t: w.t.slice(0, k), x: w.x, x2: xs, y: w.y, fs: w.fs }, { t: w.t.slice(k), x: xs, x2: w.x2, y: w.y, fs: w.fs }];
     }
 
-    function summaryPage(page, prevLabel, meet) {
+    // 大会名・日付（表の見出しより上）
+    function pageInfo(page, hdrY) {
+        var info = { name: '', year: '', date: '' };
+        page.lines.forEach(function (L) {
+            if (L.y >= hdrY) return;
+            if (!info.name) {
+                // 大会名：大会コード（8桁）・日付・「決勝一覧表」より前の部分（「2026年度…大会」の年度は大会名の一部）
+                var ws = [];
+                for (var wi = 0; wi < L.words.length; wi++) {
+                    var wt = C.zenToHanAscii(L.words[wi].t);
+                    if (/^【?\d{8}】?$/.test(wt) || /^20\d{2}[年\/](?!度)/.test(wt) || /決勝一覧|一覧表/.test(wt) || L.words[wi].x > page.width * 0.6) break;
+                    ws.push(L.words[wi].t);
+                }
+                var nm = ws.join(' ');
+                if (/大会|選考会|選手権|競技会|記録会|の部/.test(nm) && !/^[（(]?兼/.test(nm)) info.name = nm;
+            }
+            var t = C.zenToHanAscii(squash(L.text));
+            var jm = t.match(/(20\d{2})年(\d{1,2})月(\d{1,2})日/);
+            if (jm && !info.date) { info.year = jm[1]; info.date = jm[1] + pad(jm[2]) + pad(jm[3]); }
+            // 「令和8年4月11日」
+            var rm = t.match(/令和(\d{1,2}|元)年(\d{1,2})月(\d{1,2})日/);
+            if (rm && !info.date) {
+                var ry = String(2018 + (rm[1] === '元' ? 1 : parseInt(rm[1], 10)));
+                info.year = ry; info.date = ry + pad(rm[2]) + pad(rm[3]);
+            }
+            var sm = t.match(/(20\d{2})\/(\d{1,2})\/(\d{1,2})/);
+            if (sm && !info.year) info.year = sm[1];
+        });
+        return info;
+    }
+
+    // 1位～8位の欄（見出しの「1位」の位置から）
+    function placeCols(hdr) {
         var PLACE = /^([1-8１-８])位$/;
-        var hdr = page.lines.filter(function (L) {
+        var places = hdr.words.filter(function (w) { return PLACE.test(w.t); }).map(function (w) {
+            return { k: parseInt(C.zenToHanAscii(w.t.charAt(0)), 10), c: (w.x + w.x2) / 2 };
+        }).sort(function (a, b) { return a.c - b.c; });
+        var diffs = [];
+        for (var i = 1; i < places.length; i++) diffs.push(places[i].c - places[i - 1].c);
+        var colW = C.median(diffs) || 90;
+        places.forEach(function (p) { p.x0 = p.c - colW / 2; p.x1 = p.c + colW / 2; });
+        return places;
+    }
+
+    function summaryHeader(page) {
+        var PLACE = /^([1-8１-８])位$/;
+        return page.lines.filter(function (L) {
             var n = L.words.filter(function (w) { return PLACE.test(w.t); }).length;
             return n >= 3 && L.words.some(function (w) { return /^種目(名)?$/.test(w.t); });
-        })[0];
-        if (!hdr) return null;
+        })[0] || null;
+    }
+
+    function summaryPage(page, prevLabel, meet, layout) {
+        var PLACE = /^([1-8１-８])位$/;
+        var hdr = summaryHeader(page);
+        if (!hdr) {
+            // 見出しのない続きのページ（前のページと同じ、種別の欄がない表）
+            if (layout && !page.lines.some(function (L) { return L.words.some(function (w) { return /^(順位|氏名|ﾅﾝﾊﾞｰ|ナンバー)$/.test(w.t); }); })) {
+                return cellSummaryPage(page, null, layout, pageInfo(page, 0));
+            }
+            return null;
+        }
         var places = hdr.words.filter(function (w) { return PLACE.test(w.t); }).map(function (w) {
             return { k: parseInt(C.zenToHanAscii(w.t.charAt(0)), 10), c: (w.x + w.x2) / 2 };
         }).sort(function (a, b) { return a.c - b.c; });
@@ -669,26 +756,9 @@
         var place1X = places[0].x0;
 
         // 大会名・日付（ページの上の方）
-        var info = { name: '', year: '', date: '' };
-        page.lines.forEach(function (L) {
-            if (L.y >= hdr.y) return;
-            if (!info.name) {
-                // 大会名：大会コード（8桁）・日付・「決勝一覧表」より前の部分
-                var ws = [];
-                for (var wi = 0; wi < L.words.length; wi++) {
-                    var wt = C.zenToHanAscii(L.words[wi].t);
-                    if (/^【?\d{8}】?$/.test(wt) || /^20\d{2}[年\/]/.test(wt) || /決勝一覧|一覧表/.test(wt) || L.words[wi].x > page.width * 0.6) break;
-                    ws.push(L.words[wi].t);
-                }
-                var nm = ws.join(' ');
-                if (/大会|選考会|選手権|競技会|記録会|の部/.test(nm) && !/^[（(]?兼/.test(nm)) info.name = nm;
-            }
-            var t = C.zenToHanAscii(squash(L.text));
-            var jm = t.match(/(20\d{2})年(\d{1,2})月(\d{1,2})日/);
-            if (jm && !info.date) { info.year = jm[1]; info.date = jm[1] + pad(jm[2]) + pad(jm[3]); }
-            var sm = t.match(/(20\d{2})\/(\d{1,2})\/(\d{1,2})/);
-            if (sm && !info.year) info.year = sm[1];
-        });
+        var info = pageInfo(page, hdr.y);
+        // 種別の欄がない表（「種目｜1位…8位」、種目名に性別・種別が入っている）は、1種目ずつの枠で読む
+        if (!hdr.words.some(function (w) { return /^種別$/.test(w.t); }) && sexInEventCol(page, hdr)) return cellSummaryPage(page, hdr, null, info);
 
         var body = page.lines.filter(function (L) { return L.y > hdr.y + 1; });
         var inPlace = function (w) { return places.some(function (p) { return w.x >= p.x0 && w.x < p.x1; }); };
@@ -924,12 +994,401 @@
         return { info: info, rows: rows, lastLabel: prevLabel };
     }
 
+    // ---------------------------------------------------------------
+    // 決勝一覧表・入賞者一覧（種別の欄がない表：「種目｜1位…8位」。種目名に性別・種別が入っている）
+    //   1種目 = 1つの枠（何行かにまたがる）。枠の区切り：表の横線／種目の欄の性別の行／1位の記録の行
+    //   各位の欄：氏名(学年)・記録・風・都道府県・所属（リレーはチーム名・都道府県。走者は出さない）
+    // ---------------------------------------------------------------
+    var RE_CELL_REC = /^(\d{1,2}:)?\d{1,2}\.\d{1,2}(\/[+\-±]?\d{1,2}\.\d|\([+\-±]?\d{1,2}\.\d\))?$|^\d{1,2}m\d{2}(\/[+\-±]?\d{1,2}\.\d|\([+\-±]?\d{1,2}\.\d\))?$|^\d{3,5}$/;
+    var RE_CELL_MARK = /^(N?GR|=?GR|NGR|NR|=NR|JH|NJH|大会新|大会タイ|大会記録|県新|県タイ|日本新|PB|SB|\*+)$/;
+    var RE_GRADE = /\(\s*[0-9０-９]{1,2}\s*\)/;
+
+    // 「11"33」→ 11.33、「2'04"56」→ 2:04.56（秒を "、分を ' で書く PDF）
+    function normRec(t) {
+        var s = C.zenToHanAscii(t).replace(/[”″“＂]/g, '"').replace(/[’′‘＇]/g, "'");
+        var m = s.match(/^(\d{1,2})'(\d{1,2})"(\d{1,2})(.*)$/);
+        if (m) return m[1] + ':' + (m[2].length < 2 ? '0' + m[2] : m[2]) + '.' + m[3] + m[4];
+        m = s.match(/^(\d{1,3})"(\d{1,2})(.*)$/);
+        if (m) return m[1] + '.' + m[2] + m[3];
+        return dropThousandths(s);
+    }
+
+    function prefText(t) {
+        var sq = squash(norm(t)).replace(/^[(（](.*)[)）]$/, '$1');
+        return C.isPref(sq) || sq === '学連' ? sq : '';
+    }
+
+    // 所属の行 → 所属・都道府県（「宮 城・STARTLINE」「神奈川・東北大」「福岡」＋「福岡市」）
+    function teamPref(lines) {
+        var team = [], pref = '';
+        lines.forEach(function (t) {
+            var sq = squash(norm(t)).replace(/^[・･]+|[・･]+$/g, '');
+            if (!sq) return;
+            var pt = prefText(sq);
+            if (pt && !pref) { pref = C.prefName(pt) || pt; return; }
+            var ki = sq.search(/[・･]/);
+            if (ki > 0) {
+                var lt = sq.slice(0, ki), rt = sq.slice(ki + 1);
+                if (prefText(lt) && !prefText(rt)) { pref = pref || C.prefName(prefText(lt)); team.push(rt); return; }
+                if (prefText(rt) && !prefText(lt)) { pref = pref || C.prefName(prefText(rt)); team.push(lt); return; }
+            }
+            team.push(t.replace(/^[・･\s]+/, ''));
+        });
+        return { team: team.join(' '), pref: pref };
+    }
+
+    // 種目の欄の中に性別が書かれている表か（「共通男子１００ｍ」、「女子」の下に「100m」）
+    //   性別・種別が種目名の左の別の欄にある表（「男子中学共通｜１００ｍ」）は、これまでの読み方
+    function sexInEventCol(page, hdr) {
+        var p1x = placeCols(hdr)[0].x0;
+        var n = 0, hit = 0;
+        page.lines.forEach(function (L) {
+            if (L.y <= hdr.y + 1) return;
+            L.words.forEach(function (w) {
+                if (w.x >= p1x) return;
+                var t = C.zenToHanAscii(C.hanToZenKana(w.t));
+                var cut = t.replace(/^.*?(男子|女子|男女混合|男女)/, '');
+                if (!EVENT_HEAD.test(t) && !(cut !== t && EVENT_HEAD.test(cut))) return;
+                n++;
+                if (cut !== t) { hit++; return; }
+                var above = page.lines.some(function (A) {
+                    return A.y < L.y && L.y - A.y <= 12 && A.words.some(function (s2) { return /男|女/.test(s2.t) && s2.t.length >= 2 && s2.x >= w.x - 6 && s2.x < p1x; });
+                });
+                if (above) hit++;
+            });
+        });
+        return n > 0 && hit >= n * 0.6;
+    }
+
+    function cellLayout(page, hdr) {
+        var places = placeCols(hdr);
+        var body = page.lines.filter(function (L) { return L.y > hdr.y + 1; });
+        var place1X = places[0].x0;
+        var windHdr = hdr.words.filter(function (w) { return /^風(速)?$/.test(w.t) && w.x < place1X; })[0];
+        var evX1 = windHdr ? windHdr.x - 3 : place1X;
+        // 種目の欄の左端（左の日付の欄・縦書きの区分「男子トラック」は除く）
+        var starts = eventStarts(body, evX1);
+        if (!starts.length) return null;
+        // 各位の欄の左端：氏名は欄の左の線のすぐ右から書かれているので、その少し左を欄の境目にする
+        places.forEach(function (p, k) {
+            var near = [];
+            body.forEach(function (L) {
+                L.words.forEach(function (w) {
+                    if (w.x >= p.x0 - (k ? 6 : 12) && w.x < p.x0 + 4 && !RE_CELL_REC.test(normRec(w.t)) && !/^[+\-±]?\d{1,2}\.\d$/.test(C.zenToHanAscii(w.t))) near.push(w.x);
+                });
+            });
+            if (!near.length) return;
+            var x0 = Math.min.apply(null, near) - 1.5;
+            if (x0 < p.x0) { p.x0 = x0; if (k) places[k - 1].x1 = x0; }
+        });
+        return { places: places, evX0: Math.min.apply(null, starts) - 6, evX1: evX1 };
+    }
+
+    // 種目名らしい語（性別を含む 2文字以上の語・「100m」などで始まる語）の位置
+    function eventStarts(lines, evX1) {
+        var starts = [];
+        lines.forEach(function (L) {
+            L.words.forEach(function (w) {
+                if (w.x >= evX1) return;
+                var n = C.zenToHanAscii(C.hanToZenKana(w.t));
+                if ((/男|女/.test(n) && n.length >= 2) || EVENT_HEAD.test(n)) starts.push(w.x);
+            });
+        });
+        return starts;
+    }
+
+    function cellSummaryPage(page, hdr, layout, info) {
+        var lay = hdr ? cellLayout(page, hdr) : layout;
+        if (!lay) return null;
+        if (!hdr) {
+            // 見出しのない続きのページ：種目の欄の左端は、このページの種目名の位置も見る
+            var st = eventStarts(page.lines, lay.evX1);
+            if (st.length) lay = { places: lay.places, evX1: lay.evX1, evX0: Math.min(lay.evX0, Math.min.apply(null, st) - 6) };
+        }
+        var hdrY = hdr ? hdr.y : 0;
+        var places = lay.places, p1 = places[0];
+        // 表の下の「凡例」から下は読まない
+        var legend = page.lines.filter(function (L) { return L.y > hdrY + 1 && L.words.some(function (w) { return /^凡例/.test(w.t); }); })[0];
+        var body = page.lines.filter(function (L) { return L.y > hdrY + 1 && (!legend || L.y < legend.y - 1); });
+        var isRec = function (w) { return RE_CELL_REC.test(normRec(w.t)); };
+        // 枠：(1) 表の横線（種目の欄を横切る線）
+        var ys = (page.hrules || []).filter(function (h) { return h.y > hdrY + 1 && h.x1 <= lay.evX0 + 6 && h.x2 >= lay.evX0 + 20; })
+            .map(function (h) { return h.y; }).sort(function (a, b) { return a - b; });
+        var edges = [];
+        ys.forEach(function (y) { if (!edges.length || y - edges[edges.length - 1] > 2) edges.push(y); });
+        var cells = [];
+        if (edges.length >= 2) {
+            for (var i = 0; i + 1 < edges.length; i++) cells.push({ y0: edges[i], y1: edges[i + 1] });
+        } else {
+            // (2) 線がない表：種目の欄の性別の行が枠の始まり（性別が枠の一番上に書かれている表）
+            //     そうでない表は、1位の欄に記録がある行が枠の始まり
+            var recTops = body.filter(function (L) { return L.words.some(function (w) { return w.x >= p1.x0 && w.x < p1.x1 && isRec(w); }); })
+                .map(function (L) { return L.y; });
+            var sexTops = body.filter(function (L) {
+                return L.words.some(function (w) { return w.x >= lay.evX0 && w.x < lay.evX1 && /男|女/.test(w.t) && w.t.length >= 2; });
+            }).map(function (L) { return L.y; });
+            var useSex = sexTops.length && recTops.every(function (ry) { return sexTops.some(function (sy) { return ry - sy >= -0.5 && ry - sy <= 12; }); });
+            var tops = useSex ? sexTops : recTops;
+            tops.forEach(function (y, k) { cells.push({ y0: y - 2, y1: k + 1 < tops.length ? tops[k + 1] - 2 : page.height + 1 }); });
+        }
+        var rows = [];
+        cells.forEach(function (cell) {
+            var ls = body.filter(function (L) { return L.y >= cell.y0 && L.y < cell.y1; });
+            if (!ls.length) return;
+            // 種目名・日付・風（1位の欄より左）
+            var evWs = [], date = '', evWind = '';
+            ls.forEach(function (L) {
+                L.words.forEach(function (w) {
+                    if (w.x >= p1.x0) return;
+                    var n = C.zenToHanAscii(w.t).replace(/^[(（]|[)）]$/g, '');
+                    var d = n.match(/^(\d{1,2})\/(\d{1,2})$/) || n.match(/^(\d{1,2})月(\d{1,2})日$/);
+                    if (d) { date = date || pad(d[1]) + pad(d[2]); return; }
+                    var wm = n.match(/^風?[:：]?([+\-±]?\d{1,2}\.\d)$/);
+                    if (wm && w.x >= lay.evX0) { evWind = evWind || wm[1]; return; }
+                    if (w.x >= lay.evX0 && w.x < lay.evX1) evWs.push(w);
+                });
+            });
+            var title = evWs.sort(function (a, b) { return a.y - b.y || a.x - b.x; }).map(function (w) { return w.t; }).join('');
+            if (!title) return;
+            // 「中学男子100m(2)」：同じ種目の 2つ目の表 → 組 2
+            var heat = '';
+            var hm = C.zenToHanAscii(title).match(/[(（]([1-9])[)）]$/);
+            if (hm) { heat = hm[1]; title = title.replace(/[(（][1-9０-９１-９][)）]$/, ''); }
+            var sp = splitKyogimei(title);
+            var ev = eventName(sp.event);
+            if (!ev || !sp.sex && !EVENT_RE.test(norm(sp.event))) return;
+            var relay = /×|R$|リレー/.test(ev);
+            var isJump = /走り幅跳び|三段跳び/.test(ev), isTrack = !/跳|投|スロー|種競技/.test(ev);
+            places.forEach(function (p) {
+                var ws = [];
+                ls.forEach(function (L) { L.words.forEach(function (w) { if (w.x >= p.x0 && w.x < p.x1) ws.push(w); }); });
+                var items = C.wordsByLine(ws).map(function (l) {
+                    var it = { y: l.y, text: [], rec: '', wind: '', tie: 0 };
+                    l.words.forEach(function (w) {
+                        var n = normRec(w.t);
+                        var tm = n.match(/^([1-8])位$/);
+                        if (tm) { it.tie = parseInt(tm[1], 10); return; }
+                        if (RE_CELL_REC.test(n)) { if (!it.rec) it.rec = n; return; }
+                        if (/^[+\-±]\d{1,2}\.\d$/.test(n)) { it.wind = it.wind || n; return; }
+                        if (RE_CELL_MARK.test(w.t) || RE_MARK.test(w.t)) return;
+                        if (/^(公認|参考)/.test(w.t)) return;           // 「公認5m55(+1.8)」（追い風参考の記録の公認記録）
+                        it.text.push(w.t);
+                    });
+                    it.text = it.text.join(' ').trim();
+                    return it;
+                });
+                var people = [];
+                if (relay) {
+                    // リレー：記録と同じ行か、その上の行のチーム名（走者の行は除く）。下の行の都道府県
+                    var teams = items.filter(function (it) { return it.text && !RE_GRADE.test(it.text) && !prefText(it.text); });
+                    items.filter(function (it) { return it.rec; }).forEach(function (rc) {
+                        var tl = teams.filter(function (t) { return !t.used && t.y <= rc.y + 1; }).sort(function (a, b) { return b.y - a.y; })[0];
+                        if (!tl) return;
+                        tl.used = true;
+                        var pl = items.filter(function (it) { return it.text && prefText(it.text) && it.y > tl.y && it.y - tl.y < 14; })[0];
+                        people.push({ name: '', grade: '', team: tl.text, pref: pl ? (C.prefName(prefText(pl.text)) || prefText(pl.text)) : '',
+                                      rec: rc.rec, wind: rc.wind, tie: rc.tie || tl.tie });
+                    });
+                } else {
+                    // 個人：氏名(学年)の行から次の人まで。同じ欄に 2人（同記録の同順位）書かれていることもある
+                    var cur = null, list = [];
+                    items.forEach(function (it) {
+                        if (cur && ((RE_GRADE.test(it.text) && cur.name) || (it.rec && cur.rec))) cur = null;
+                        if (!cur) { cur = { name: '', rec: '', wind: '', tie: 0, lines: [] }; list.push(cur); }
+                        if (it.tie) cur.tie = it.tie;
+                        if (it.rec && !cur.rec) cur.rec = it.rec;
+                        if (it.wind && !cur.wind) cur.wind = it.wind;
+                        if (!it.text) return;
+                        if (!cur.name) cur.name = it.text; else cur.lines.push(it.text);
+                    });
+                    list.forEach(function (c) {
+                        if (!c.rec || !c.name) return;
+                        var pg = person(c.name), tp = teamPref(c.lines);
+                        people.push({ name: pg[0], grade: pg[1], team: tp.team, pref: tp.pref, rec: c.rec, wind: c.wind, tie: c.tie });
+                    });
+                }
+                people.forEach(function (pp) {
+                    var rw = splitRec(pp.rec);
+                    var row = { rank: String(pp.tie || p.k), rec: record(rw.rec, ev), wind: '', name: pp.name, grade: pp.grade,
+                                team: org(pp.team), pref: org(pp.pref), relay: relay };
+                    if (isTrack || isJump) row.wind = wind(rw.wind || pp.wind || evWind || '');
+                    rows.push({ date: date, meet: info.name, event: ev, sex: sp.sex, category: sp.category, heat: heat, row: row });
+                });
+            });
+        });
+        return { info: info, rows: rows, lastLabel: null, layout: lay };
+    }
+
+    // ---------------------------------------------------------------
+    // 記録表（1行に 4人分：位・氏名・所属・記録 が横に並ぶ表。全九州都市対抗など）
+    //   左の欄：月日・種目（性別／種目名）・組・風
+    //   各人：順位の行に 所属（市）・記録、その上に 氏名(学年)、下に 都道府県
+    //   （跳躍・投てきは記録が上の行、風が下の行のこともある。リレーはチーム名と都道府県。走者は出さない）
+    //   ラウンドはページの題名「記録表 (女子・決勝)」から
+    // ---------------------------------------------------------------
+    function gridHeader(page) {
+        return page.lines.filter(function (L) {
+            var ts = L.words.map(function (w) { return w.t; });
+            return ts.filter(function (t) { return t === '位'; }).length >= 2 && ts.indexOf('氏名') >= 0 && ts.indexOf('記録') >= 0 &&
+                ts.indexOf('種目') >= 0;
+        })[0] || null;
+    }
+
+    //   carry：前のページの最後の組（ページの始めに、前のページの組の続きの行がある）
+    function gridPage(page, carry) {
+        var hdr = gridHeader(page);
+        if (!hdr) return null;
+        var W = hdr.words;
+        var pos = W.filter(function (w) { return w.t === '位'; }).sort(function (a, b) { return a.x - b.x; });
+        var groups = pos.map(function (p, i) {
+            var x1 = i + 1 < pos.length ? pos[i + 1].x - 3 : page.width + 1;
+            var inG = function (re) { return W.filter(function (w) { return re.test(w.t) && w.x > p.x && w.x < x1; })[0] || null; };
+            var nm = inG(/^氏名$/), tm = inG(/^所属$/), rc = inG(/^記録$/);
+            return { x0: p.x - 3, x1: x1, rankX: p.x, nameX: nm ? nm.x : p.x + 30, teamX: tm ? tm.x : null, recX: rc ? rc.x : null };
+        }).filter(function (g) { return g.teamX !== null && g.recX !== null; });
+        if (!groups.length) return null;
+        var colX = function (re) { var w = W.filter(function (x) { return re.test(x.t); })[0]; return w ? w.x : null; };
+        var evX = colX(/^種目$/), heatX = colX(/^組$/), windX = colX(/^風$/);
+        var leftEnd = groups[0].x0;
+        var info = pageInfo(page, hdr.y);
+        // 題名「記録表 (女子・決勝)」
+        var round = '';
+        page.lines.forEach(function (L) {
+            if (L.y >= hdr.y) return;
+            var m = squash(norm(L.text)).match(/記録表[(（](?:男子|女子|男女)?[・･]?([^)）]*)[)）]/);
+            if (m && m[1]) round = m[1];
+        });
+        var body = page.lines.filter(function (L) { return L.y > hdr.y + 1; });
+        // 各人の基準の行：位の欄に順位の数字（または記録の欄に DNS など）がある行
+        var rows = [];
+        body.forEach(function (L) {
+            var hits = [];
+            groups.forEach(function (g) {
+                var rk = L.words.filter(function (w) { return /^\d{1,3}$/.test(w.t) && Math.abs(w.x - g.rankX) <= 8; })[0];
+                var st = L.words.filter(function (w) { return w.x >= g.recX - 14 && w.x < g.x1 && RE_STATUS.test(C.zenToHanAscii(w.t).toUpperCase()); })[0];
+                if (rk || st) hits.push({ g: g, rank: rk ? rk.t : '', status: st ? C.zenToHanAscii(st.t).toUpperCase().match(RE_STATUS)[1] : '' });
+            });
+            if (hits.length) rows.push({ y: L.y, line: L, hits: hits });
+        });
+        rows.forEach(function (r, i) {
+            r.top = i ? (rows[i - 1].y + r.y) / 2 : hdr.y + 1;
+            r.bot = i + 1 < rows.length ? (r.y + rows[i + 1].y) / 2 : page.height + 1;
+        });
+        var inX = function (L, x0, x1) { return L.words.filter(function (w) { return w.x >= x0 && w.x < x1; }); };
+        var near = function (x0, x) { return x !== null && Math.abs(x0 - x) <= 10; };
+        // 組ごとのまとまり：組の番号・月日がある行から
+        var blocks = [], cur = null;
+        rows.forEach(function (r) {
+            var ws = r.line.words;
+            var hw = heatX !== null ? ws.filter(function (w) { return /^\d{1,2}$/.test(w.t) && near(w.x, heatX); })[0] : null;
+            var dw = ws.filter(function (w) { return w.x < leftEnd && /^\d{1,2}\/\d{1,2}$|^\d{1,2}月\d{1,2}日$/.test(C.zenToHanAscii(w.t)); })[0];
+            if (!hw && !dw && !cur && carry && carry.title) {
+                cur = { title: carry.title, heat: carry.heat, wind: carry.wind, date: carry.date, rows: [] };
+                blocks.push(cur);
+            }
+            if (hw || dw || !cur) {
+                var band = body.filter(function (L) { return L.y >= r.top && L.y < r.bot; });
+                var evWs = [];
+                band.forEach(function (L) {
+                    inX(L, evX !== null ? evX - 30 : 0, heatX !== null ? heatX - 3 : leftEnd).forEach(function (w) {
+                        if (!/^\d{1,2}\/\d{1,2}$/.test(C.zenToHanAscii(w.t))) evWs.push(w);
+                    });
+                });
+                var title = evWs.sort(function (a, b) { return a.y - b.y || a.x - b.x; }).map(function (w) { return w.t; }).join('');
+                var wd = windX !== null ? ws.filter(function (w) { return near(w.x, windX) && /^[+\-±]?\d{1,2}\.\d$/.test(C.zenToHanAscii(w.t)); })[0] : null;
+                var dm = dw ? C.zenToHanAscii(dw.t).match(/(\d{1,2})\D(\d{1,2})/) : null;
+                cur = { title: title || (cur ? cur.title : ''), heat: hw ? parseInt(hw.t, 10) : 0, wind: wd ? C.zenToHanAscii(wd.t) : '',
+                        date: dm ? pad(dm[1]) + pad(dm[2]) : (cur ? cur.date : ''), rows: [] };
+                blocks.push(cur);
+            }
+            cur.rows.push(r);
+        });
+        var out = [];
+        blocks.forEach(function (bk) {
+            var sp = splitKyogimei(bk.title);
+            var ev = eventName(sp.event);
+            if (!ev) return;
+            var relay = /×|R$|リレー/.test(ev);
+            var isJump = /走り幅跳び|三段跳び/.test(ev), isTrack = !/跳|投|スロー|種競技/.test(ev);
+            bk.rows.forEach(function (r) {
+                var band = body.filter(function (L) { return L.y >= r.top && L.y < r.bot; });
+                r.hits.forEach(function (h) {
+                    var g = h.g;
+                    // 記録・風（記録の欄。基準の行に近いものから）
+                    var rec = '', wnd = '', recWs = [];
+                    band.forEach(function (L) { inX(L, g.recX - 14, g.x1).forEach(function (w) { recWs.push(w); }); });
+                    recWs.sort(function (p, q) { return Math.abs(p.y - r.y) - Math.abs(q.y - r.y); }).forEach(function (w) {
+                        var t = normRec(w.t);
+                        if (/^[+\-±]\d{1,2}\.\d$/.test(t)) { wnd = wnd || t; return; }
+                        if (!rec && RE_CELL_REC.test(t)) rec = t;
+                    });
+                    // 氏名の欄：左から続いている語だけ（右の方にあるのはリレーの走者）
+                    var lines = [];
+                    band.forEach(function (L) {
+                        var ws = inX(L, g.rankX + 6, g.teamX - 12).sort(function (a, b) { return a.x - b.x; });
+                        if (!ws.length || ws[0].x > g.nameX + 10) return;
+                        var ph = [ws[0]];
+                        for (var k = 1; k < ws.length && ws[k].x - ph[ph.length - 1].x2 < 22; k++) ph.push(ws[k]);
+                        lines.push({ y: L.y, text: ph.map(function (w) { return w.t; }).join(' ') });
+                    });
+                    var pref = '', nameT = '';
+                    lines.sort(function (a, b) { return a.y - b.y; }).forEach(function (l) {
+                        var pt = prefText(l.text);
+                        if (pt) { if (!pref) pref = C.prefName(pt) || pt; return; }
+                        if (!nameT) nameT = l.text;
+                    });
+                    // 所属：順位の行の、所属の欄
+                    var team = inX(r.line, g.teamX - 12, g.recX - 14).map(function (w) { return w.t; }).join(' ');
+                    var row = { rank: h.rank, rec: rec ? record(splitRec(rec).rec, ev) : h.status, wind: '', name: '', grade: '', team: '', pref: org(pref) };
+                    if (relay) row.team = org(nameT);
+                    else {
+                        var pg = person(nameT);
+                        row.name = pg[0]; row.grade = pg[1]; row.team = org(team);
+                    }
+                    if (isTrack) row.wind = wind(bk.wind);
+                    else if (isJump) row.wind = wind(splitRec(rec).wind || wnd);
+                    out.push({ date: bk.date, meet: info.name, year: info.year, event: ev, sex: sp.sex, category: sp.category,
+                               round: round || '決勝', heat: bk.heat, row: row });
+                });
+            });
+        });
+        var last = blocks[blocks.length - 1];
+        out.carry = last ? { title: last.title, heat: last.heat, wind: last.wind, date: last.date } : carry;
+        return out;
+    }
+
+    // 記録表のページ全部 → 16列の行（同じ種目・ラウンドで組が 2つ以上ある場合だけ組の番号）
+    function parseGrid(pages, meet) {
+        var list = [], carry = null;
+        pages.forEach(function (page) {
+            var r = gridPage(page, carry);
+            if (!r) return;
+            carry = r.carry;
+            list = list.concat(r);
+        });
+        var heatsOf = {};
+        list.forEach(function (x) {
+            var k = x.sex + '|' + x.category + '|' + x.event + '|' + x.round;
+            heatsOf[k] = heatsOf[k] || {};
+            heatsOf[k][x.heat] = true;
+        });
+        return list.map(function (x) {
+            var k = x.sex + '|' + x.category + '|' + x.event + '|' + x.round;
+            var multi = Object.keys(heatsOf[k]).length > 1;
+            var year = x.year || meet.year;
+            return [x.date ? year + x.date : meet.firstDate || '', x.meet || meet.name, x.event, x.row.wind,
+                x.round + (x.category ? '【' + x.category + '】' : ''), multi ? String(x.heat || '') : '', x.row.rank, x.row.rec,
+                x.row.name, '', x.row.grade, x.row.team, x.row.pref, x.sex, '', ''];
+        });
+    }
+
     function parseSummary(pages, meet) {
         var out = [], label = null, lastInfo = { name: meet.name, year: meet.year };
-        var lastName = null;
+        var lastName = null, layout = null;
         pages.forEach(function (page) {
-            var r = summaryPage(page, label, meet);
+            var r = summaryPage(page, label, meet, layout);
             if (!r) return;
+            if (r.layout) layout = r.layout;
             // 大会が変わったら、前のページの種別は引き継がない
             if (r.info.name && lastName !== null && r.info.name !== lastName) {
                 r = summaryPage(page, null, meet);
@@ -942,10 +1401,14 @@
             r.rows.forEach(function (x) {
                 var year = r.info.year || lastInfo.year || meet.year;
                 out.push([x.date ? year + x.date : (r.info.date || lastInfo.date || meet.firstDate || ''), r.info.name || lastInfo.name, x.event, x.row.wind,
-                    '決勝' + (x.category ? '【' + x.category + '】' : ''), '', x.row.rank, x.row.rec,
-                    x.row.name, '', x.row.grade, x.row.team, '', x.sex, '', '']);
+                    '決勝' + (x.category ? '【' + x.category + '】' : ''), x.heat || '', x.row.rank, x.row.rec,
+                    x.row.name, '', x.row.grade, x.row.team, x.row.pref || '', x.sex, '', '']);
             });
         });
+        // 「中学男子100m」と「中学男子100m(2)」：同じ種目が 2つの表 → 1つ目は組 1
+        var two = {};
+        out.forEach(function (r) { if (r[5]) two[r[1] + '|' + r[13] + '|' + r[2] + '|' + r[4]] = true; });
+        out.forEach(function (r) { if (!r[5] && two[r[1] + '|' + r[13] + '|' + r[2] + '|' + r[4]]) r[5] = '1'; });
         return out;
     }
 
@@ -985,6 +1448,10 @@
                 if (so) { sexLine = so; return; }
                 // 「タイムレース総合結果」の表は、組ごとの表と同じ内容なので読まない
                 if (/^タイムレース総合/.test(squash(norm(L.text))) && L.words[0].x < page.width * 0.35) { marks.push({ type: 'end', y: L.y }); return; }
+                //   「3組　　タイムレース総合」のように右側にある場合は、その下の表だけ除く
+                L.words.forEach(function (w) {
+                    if (/^タイムレース総合/.test(norm(w.t)) && w.x >= page.width * 0.35) excluders.push({ y: L.y, x: w.x });
+                });
                 // 「Ｂ決勝　決勝」のように A・B 決勝が左右に並ぶ見出し → 決勝の 1組（A）・2組（B）
                 var fin = L.words.map(function (w) { return { w: w, t: C.zenToHanAscii(w.t).replace(/^[\[［]\s*/, '').replace(/\s*[\]］]$/, '') }; })
                     .filter(function (o) { return o.t; });
@@ -998,8 +1465,12 @@
                 var rd = roundOf(L, page);
                 if (rd) marks.push({ type: 'round', y: L.y, info: rd });
                 var ts = L.words.map(function (w) { return w.t; });
+                var numHdr = function (w) { return /^(ﾚｰﾝ|ORD|試順|試技)?(ﾅﾝﾊﾞｰ|ナンバー)$|^(Bib|BIB|No|NO|№)\.?$/.test(w.t); };
                 if ((ts.indexOf('順位') >= 0 || ts.indexOf('順') >= 0) &&
-                    L.words.some(function (w) { return /^(ﾚｰﾝ|ORD|試順|試技)?(ﾅﾝﾊﾞｰ|ナンバー)$|^(Bib|BIB|No|NO|№)\.?$/.test(w.t); })) {
+                    (L.words.some(numHdr) ||
+                     // 「順位 試 1m40 1m45 …」の下の行に「ﾅﾝﾊﾞｰ 氏 名 所 属 記録」（走高跳の見出しが 2段）
+                     (ts.indexOf('順位') >= 0 && lines.some(function (L2) { return L2 !== L && L2.y > L.y && L2.y - L.y <= 6 && L2.words.some(numHdr) &&
+                         !L2.words.some(function (w) { return /^順位?$/.test(w.t); }); })))) {
                     // 「組」の列がある表は、タイムレースの総合順位表（組ごとの表と同じ内容）なので読まない
                     marks.push({ type: 'header', y: L.y, idx: idx, combined: ts.indexOf('組') >= 0 });
                 }
@@ -1018,6 +1489,8 @@
                 });
                 var sq = squash(norm(L.text));
                 if (/^(凡例|ラップ表)/.test(sq)) marks.push({ type: 'end', y: L.y });
+                // 「Top8」（上位8人の表。組ごとの表と同じ内容）
+                if (/^(TOP|Top|top|トップ|ﾄｯﾌﾟ)[8８]$/.test(sq) && L.words[0].x < page.width * 0.35) marks.push({ type: 'end', y: L.y });
                 // 「タイムレース上位8位」などの表：左端にあれば以降を読まない、右側にあればその下の表だけ除く
                 L.words.forEach(function (w) {
                     if (!/上位\d+位$/.test(norm(w.t))) return;
@@ -1151,10 +1624,12 @@
                 var isTrack = !/跳|投|スロー|種競技/.test(ev.event);
                 heats.forEach(function (h, i) {
                     var heatNo = multi ? String(h.no || i + 1) : '';
+                    // 風が各選手の記録に付いている表（「11.95/-0.5」）：記録のない選手（DNS など）も同じ組の風
+                    if (isTrack && !h.wind) h.rows.some(function (r) { if (r.wind) { h.wind = r.wind; return true; } return false; });
                     h.rows.forEach(function (r) {
                         var rec = record(r.rec, ev.event);
                         if (!rec) rec = r.status;
-                        var w = isTrack ? wind(h.wind || '') : (/走り幅跳び|三段跳び/.test(ev.event) ? wind(r.wind) : '');
+                        var w = isTrack ? wind(h.wind || r.wind || '') : (/走り幅跳び|三段跳び/.test(ev.event) ? wind(r.wind) : '');
                         var name = '', grade = '', aff1 = '', aff2 = '';
                         if (r.team && !r.name && !r.bib) {
                             aff1 = org(r.team);        // リレーはチーム名を所属1に
@@ -1176,6 +1651,16 @@
         });
         // 詳しい結果の表がない PDF（決勝一覧表・上位8位一覧だけの PDF）
         var summaryUsed = false;
+        // 記録表（1行に 4人分の表）：決勝一覧表より詳しいので、こちらを使う
+        if (!outRows.length) {
+            outRows = parseGrid(pages, meet);
+            if (outRows.length) {
+                events = [];
+                var seenG = {};
+                outRows.forEach(function (r) { var k = r[13] + '|' + r[2] + '|' + r[4]; if (!seenG[k]) { seenG[k] = 1; events.push(k); } });
+                if (!meet.name) meet.name = outRows[0][1];
+            }
+        }
         if (!outRows.length) {
             outRows = parseSummary(pages, meet);
             summaryUsed = outRows.length > 0;
@@ -1200,6 +1685,13 @@
         if (unreadable.length) {
             warnings.unshift({ type: 'unreadable', message: unreadable.join('・') + 'ページ目は、文字が図形・画像に変換されているため読み取れませんでした（表紙・広告などのページであれば問題ありません）。' });
         }
+        // 日付がない種目が多い PDF（日付がどこにも書かれていない）は、お知らせを 1つにまとめる
+        var dateWarn = warnings.filter(function (w) { return w.type === 'date'; });
+        if (dateWarn.length > 3) {
+            warnings = warnings.filter(function (w) { return w.type !== 'date'; });
+            warnings.push({ type: 'date', message: '日付が PDF に書かれていないため（' + dateWarn.length + '種目）、「日付」の列は空欄で出力しています。コピーしたあとに入力をお願いします。' });
+        }
+        if (!meet.name && outRows.length && outRows[0][1]) meet.name = outRows[0][1];     // 決勝一覧表のページの大会名
         if (!meet.name && outRows.length) warnings.push({ type: 'meet', message: '大会名が PDF に書かれていないため、「大会名」の列は空欄で出力しています。コピーしたあとに入力をお願いします。' });
         else if (!meet.name && !summaryUsed) warnings.push({ type: 'meet', message: '大会名が見つかりませんでした。' });
         if (yearGuessed && outRows.length) warnings.push({ type: 'year', message: '年が PDF に書かれていないため、日付の年を ' + meet.year + '年 として出力しています。違う場合は手直しをお願いします。' });
@@ -1208,6 +1700,6 @@
 
     return {
         parse: parse, HEADERS: HEADERS, parseSummary: parseSummary,
-        _test: { eventName: eventName, record: record, splitKyogimei: splitKyogimei, person: person, kanaAsk: kanaAsk }
+        _test: { eventName: eventName, record: record, splitKyogimei: splitKyogimei, person: person, kanaAsk: kanaAsk, gridPage: gridPage }
     };
 }));

@@ -11,7 +11,7 @@ for f in ../lanp2/start-list.pdf ../lanp2/lanp2_2/スタートリスト①.pdf .
   node tools/run_startlist.js "$f" 2>&1 | grep -Ev "$F" | grep "^#\|^  !"
 done
 for f in ../lanp2/lanp2_1/結果①.pdf ../lanp2/lanp2_1/結果④.pdf ../lanp2/lanp2_4/大会結果TOP8.pdf \
-         ../lanp2/lanp2_7/男子リザルト.pdf ../lanp2/lanp2_7/女子リザルト.pdf ../lanp2/lanp2_8/results.pdf; do
+         ../lanp2/lanp2_7/男子リザルト.pdf ../lanp2/lanp2_7/女子リザルト.pdf ../lanp2/lanp2_8/results.pdf ../lanp2/lanp2_15/*.pdf; do
   node tools/run_result.js "$f" 2>&1 | grep -Ev "$F" | grep "^#\|^  !"
 done
 for f in ../lanp2/time-table.pdf "../lanp2/lanp2_2/タイムテーブル①.pdf" "../lanp2/lanp2_2/タイムテーブル②＿スタートリスト.pdf" \

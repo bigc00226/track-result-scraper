@@ -51,10 +51,10 @@ color: #6D4C00;
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
-<script src="pdf_js/pdfcore.js?v=12"></script>
-<script src="pdf_js/result.js?v=12"></script>
-<script src="pdf_js/result_render.js?v=12"></script>
-<script src="pdf_js/pdf_page.js?v=12"></script>
+<script src="pdf_js/pdfcore.js?v=13"></script>
+<script src="pdf_js/result.js?v=13"></script>
+<script src="pdf_js/result_render.js?v=13"></script>
+<script src="pdf_js/pdf_page.js?v=13"></script>
 <script>
 PdfPage.init({
     mode: 'result',
@@ -62,7 +62,7 @@ PdfPage.init({
     render: function (model) { return ResultRender.render(model.headers, model.rows); },
     summary: function (model, pages) {
         return pages.length + 'ページを読み取りました。種目 ' + model.events.length + '・' + model.rows.length + '行' +
-            (model.summary ? '（決勝一覧表から出力）' : '');
+            (model.summary ? '（決勝一覧表・入賞者一覧から出力）' : '');
     }
 });
 </script>
