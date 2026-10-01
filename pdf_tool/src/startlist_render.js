@@ -82,7 +82,12 @@
     var SUMMARY_STYLE = LABEL_STYLE.replace('display:block;', '');
     var TD_STYLE = 'border:1px solid #555555;padding:5px;';
     // 開閉できることを示す印（緑のバーの右端）。サイト側の CSS に関係なく表示されるように、文字で入れる
-    var TAB_MARK = '<span style="float:right;padding:0 1em 0 0.5em;">▼</span>';
+    //   バーの右上に固定する（スマートフォンで種目名が長いと、▼ だけがバーの下に送られていたため）
+    var TAB_MARK = '<span style="position:absolute;top:0.75em;right:1em;">▼</span>';
+    // ▼ の分だけ右を空ける（種目名が長い場合は ▼ の手前で、語の切れ目で折り返す）
+    //   行の高さ 1.5 ＋ 上下の余白 0.75em で、1行のバーの高さはこれまでと同じ（3行分の高さ）
+    var CHECK_LABEL_STYLE = LABEL_STYLE.replace('line-height:3;', 'line-height:1.5;')
+        .replace('padding:0 0 0 1em;', 'padding:0.75em 2.5em 0.75em 1em;') + 'word-break:keep-all;overflow-wrap:anywhere;';
 
     /**
      * events : StartList.parse() の events
@@ -113,7 +118,7 @@
             } else if (!plain) {
                 out.push('<div class="cp_actab">');
                 out.push('<input id="' + esc(id) + '" type="checkbox" name="tabs"' + (openAll ? ' checked' : '') + '>');
-                out.push('<label for="' + esc(id) + '" style="' + labelStyle + LABEL_STYLE + '">' + esc(ev.label) + TAB_MARK + '</label>');
+                out.push('<label for="' + esc(id) + '" style="' + labelStyle + CHECK_LABEL_STYLE + '">' + esc(ev.label) + TAB_MARK + '</label>');
                 out.push('<div class="cp_actab-content">');
             }
             if (!plain) out.push('');
