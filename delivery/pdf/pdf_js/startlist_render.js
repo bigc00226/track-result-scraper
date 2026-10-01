@@ -13,7 +13,8 @@
  *     所属の表示は「(所属・都道府県)」と「所属(都道府県)」を画面で切り替え
  *   種目は最初から開いた状態にもできます（画面で切り替え）
  *   見出しの形式（画面で切り替え）
- *     checkbox … NISHI 下段と同じ（サイト側の CSS で開閉・「＋」を表示）
+ *     checkbox … NISHI 下段と同じ（サイト側の CSS で開閉）。見出しの右端に「▼」を文字で入れる
+ *                （「＋」はサイト側の CSS で表示するもので、サイトによっては表示されないため）
  *     details  … <details> を使い、色・枠・太さを HTML に直接書く
  *                （貼り付け先の CSS が効かない・チェックボックスが消えるサイト用）
  *     plain    … 開閉なし。種目名も表の 1行目にした、ただの表（どのサイトでも表示できる）
@@ -80,6 +81,8 @@
     // <summary> は display:block にすると開閉の印（▶）が消えるので、そのままにする
     var SUMMARY_STYLE = LABEL_STYLE.replace('display:block;', '');
     var TD_STYLE = 'border:1px solid #555555;padding:5px;';
+    // 開閉できることを示す印（緑のバーの右端）。サイト側の CSS に関係なく表示されるように、文字で入れる
+    var TAB_MARK = '<span style="float:right;padding:0 1em 0 0.5em;">▼</span>';
 
     /**
      * events : StartList.parse() の events
@@ -110,7 +113,7 @@
             } else if (!plain) {
                 out.push('<div class="cp_actab">');
                 out.push('<input id="' + esc(id) + '" type="checkbox" name="tabs"' + (openAll ? ' checked' : '') + '>');
-                out.push('<label for="' + esc(id) + '" style="' + labelStyle + LABEL_STYLE + '">' + esc(ev.label) + '</label>');
+                out.push('<label for="' + esc(id) + '" style="' + labelStyle + LABEL_STYLE + '">' + esc(ev.label) + TAB_MARK + '</label>');
                 out.push('<div class="cp_actab-content">');
             }
             if (!plain) out.push('');

@@ -75,25 +75,8 @@ margin: 0;
 .cp_actab input:checked ~ .cp_actab-content {
 max-height: 100%;
 }
-/* Icon */
-.cp_actab label::after {
-line-height: 3;
-position: absolute;
-top: 0;
-right: 0;
-display: block;
-width: 3em;
-height: 3em;
--webkit-transition: all 0.5s;
-transition: all 0.5s;
-text-align: center;
-}
-.cp_actab input[type=checkbox] + label::after {
-content: '＋';
-}
-.cp_actab input[type=checkbox]:checked + label::after {
-content: '−';
-}
+/* 開閉の印：緑のバーの右端の「▼」は、コピーする HTML の中に文字で入れています
+   （サイトによっては CSS の「＋」が表示されないため。この画面でも「＋」は出しません） */
 
 /* 読み込み欄（コピーの対象外） */
 #pdf-panel {
@@ -179,10 +162,10 @@ jQuery(function($){
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/legacy/build/pdf.min.js"></script>
-<script src="pdf_js/pdfcore.js?v=13"></script>
-<script src="pdf_js/startlist.js?v=13"></script>
-<script src="pdf_js/startlist_render.js?v=13"></script>
-<script src="pdf_js/pdf_page.js?v=13"></script>
+<script src="pdf_js/pdfcore.js?v=14"></script>
+<script src="pdf_js/startlist.js?v=14"></script>
+<script src="pdf_js/startlist_render.js?v=14"></script>
+<script src="pdf_js/pdf_page.js?v=14"></script>
 <script>
 PdfPage.init({
     mode: 'startlist',

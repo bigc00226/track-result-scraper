@@ -1085,12 +1085,15 @@
     }
 
     // 種目名らしい語（性別を含む 2文字以上の語・「100m」などで始まる語）の位置
+    //   左端の縦書きの区分（「フィールド」の「ィー」など）がくっついた語は、種目名の位置ではない
+    var RE_LABEL_HEAD = /^[ァ-ヶーｦ-ﾟ子]+/;
     function eventStarts(lines, evX1) {
         var starts = [];
         lines.forEach(function (L) {
             L.words.forEach(function (w) {
                 if (w.x >= evX1) return;
                 var n = C.zenToHanAscii(C.hanToZenKana(w.t));
+                if (/^[ァィゥェォッャュョヮー子]/.test(n)) return;
                 if ((/男|女/.test(n) && n.length >= 2) || EVENT_HEAD.test(n)) starts.push(w.x);
             });
         });
@@ -1140,6 +1143,11 @@
             ls.forEach(function (L) {
                 L.words.forEach(function (w) {
                     if (w.x >= p1.x0) return;
+                    // 縦書きの区分の文字がくっついた語（「ィー共通男子三段跳」「ィー(4月25日)」）：区分の文字を除く
+                    if (w.x < lay.evX0) {
+                        var cut = w.t.replace(RE_LABEL_HEAD, '');
+                        if (cut && cut !== w.t) w = { t: cut, x: lay.evX0, x2: w.x2, y: w.y, fs: w.fs };
+                    }
                     var n = C.zenToHanAscii(w.t).replace(/^[(（]|[)）]$/g, '');
                     var d = n.match(/^(\d{1,2})\/(\d{1,2})$/) || n.match(/^(\d{1,2})月(\d{1,2})日$/);
                     if (d) { date = date || pad(d[1]) + pad(d[2]); return; }
@@ -1164,12 +1172,19 @@
                 ls.forEach(function (L) { L.words.forEach(function (w) { if (w.x >= p.x0 && w.x < p.x1) ws.push(w); }); });
                 var items = C.wordsByLine(ws).map(function (l) {
                     var it = { y: l.y, text: [], rec: '', wind: '', tie: 0 };
+                    var lw = [];
                     l.words.forEach(function (w) {
+                        var gm = w.t.match(/^(.*?[(（]\s*[0-9０-９]{1,2}\s*[)）])(\S+)$/);
+                        if (gm && RE_CELL_REC.test(normRec(gm[2]))) { lw.push({ t: gm[1] }, { t: gm[2] }); return; }
+                        lw.push(w);
+                    });
+                    lw.forEach(function (w) {
                         var n = normRec(w.t);
                         var tm = n.match(/^([1-8])位$/);
                         if (tm) { it.tie = parseInt(tm[1], 10); return; }
+                        // 風が 0.0 のときは符号が付かない（記録ではない）
+                        if (/^[+\-±]\d{1,2}\.\d$/.test(n) || n === '0.0') { it.wind = it.wind || n; return; }
                         if (RE_CELL_REC.test(n)) { if (!it.rec) it.rec = n; return; }
-                        if (/^[+\-±]\d{1,2}\.\d$/.test(n)) { it.wind = it.wind || n; return; }
                         if (RE_CELL_MARK.test(w.t) || RE_MARK.test(w.t)) return;
                         if (/^(公認|参考)/.test(w.t)) return;           // 「公認5m55(+1.8)」（追い風参考の記録の公認記録）
                         it.text.push(w.t);
@@ -1193,6 +1208,11 @@
                     // 個人：氏名(学年)の行から次の人まで。同じ欄に 2人（同記録の同順位）書かれていることもある
                     var cur = null, list = [];
                     items.forEach(function (it) {
+                        // 記録の下の行の「1.2」（符号のない風）は、次の人の記録ではない
+                        if (cur && cur.rec && it.rec && !it.text && /^\d\.\d$/.test(it.rec) && !/^\d{1,2}\.\d$/.test(cur.rec)) {
+                            it.wind = it.wind || it.rec;
+                            it.rec = '';
+                        }
                         if (cur && ((RE_GRADE.test(it.text) && cur.name) || (it.rec && cur.rec))) cur = null;
                         if (!cur) { cur = { name: '', rec: '', wind: '', tie: 0, lines: [] }; list.push(cur); }
                         if (it.tie) cur.tie = it.tie;
@@ -1319,7 +1339,7 @@
                     band.forEach(function (L) { inX(L, g.recX - 14, g.x1).forEach(function (w) { recWs.push(w); }); });
                     recWs.sort(function (p, q) { return Math.abs(p.y - r.y) - Math.abs(q.y - r.y); }).forEach(function (w) {
                         var t = normRec(w.t);
-                        if (/^[+\-±]\d{1,2}\.\d$/.test(t)) { wnd = wnd || t; return; }
+                        if (/^[+\-±]\d{1,2}\.\d$/.test(t) || t === '0.0') { wnd = wnd || t; return; }
                         if (!rec && RE_CELL_REC.test(t)) rec = t;
                     });
                     // 氏名の欄：左から続いている語だけ（右の方にあるのはリレーの走者）

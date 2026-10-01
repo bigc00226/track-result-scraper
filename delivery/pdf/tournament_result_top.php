@@ -198,6 +198,13 @@ echo "<form target='_blank' action='nishi_x-day.php' method='post'>\r\n";
 echo "<input type='text' size='40' name='url' style='font-size:x-large;' placeholder=' URL' />\r\n";
 echo "<input type='submit' style='font-size:x-large;' value='  GO!!  ' />\r\n";
 echo "</form>\r\n";
+
+// 大会ページ（…/shtml/TimeTable.html）のタイムテーブル → PDF のタイムテーブルと同じ HTML の表
+echo "<div style='font-size:18px;font-weight:bold;'>【タイムテーブル】</div>\r\n";
+echo "<form target='_blank' action='nishi_timetable.php' method='post'>\r\n";
+echo "<input type='text' size='40' name='url' style='font-size:x-large;' placeholder=' URL' />\r\n";
+echo "<input type='submit' style='font-size:x-large;' value='  GO!!  ' />\r\n";
+echo "</form>\r\n";
 //////////////////////////////////////////////////////////////////
 ////////////////////////////// NISHI /////////////////////////////
 //////////////////////////////////////////////////////////////////

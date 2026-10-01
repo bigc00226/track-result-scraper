@@ -1,3 +1,11 @@
+<!-- NISHI の欄（nishi_x-day.php の入力欄の下）に追加：大会ページのタイムテーブル -->
+<div style='font-size:18px;font-weight:bold;'>【タイムテーブル】</div>
+<form target='_blank' action='nishi_timetable.php' method='post'>
+<input type='text' size='40' name='url' style='font-size:x-large;' placeholder=' URL' />
+<input type='submit' style='font-size:x-large;' value='  GO!!  ' />
+</form>
+
+<!-- NISHI の欄の下に追加：PDF の欄 -->
 <tr><td align="center" style="padding:10px 20px;" bgcolor="#F6E3CE">
 <h2 style='font-size:x-large;'>PDF（結果・スタートリスト・タイムテーブル）</h2>
 <div style='font-size:18px;font-weight:bold;'>【結果】</div>
