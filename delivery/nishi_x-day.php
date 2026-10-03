@@ -1,6 +1,10 @@
 <?php
 //header("Content-type: charset=UTF-8");
 header("Content-type:text/html; charset=UTF-8");
+
+// 大会ページのデータを読み込むときに、ブラウザ名（User-Agent）を付ける
+//   ブラウザ名のない読み込みを受け付けないサーバの大会があるため（付けないと何も出力されません）
+ini_set('user_agent', 'Mozilla/5.0 (compatible; NishiResultExport/1.0)');
 //header("Content-type:text/html; charset=Shift-JIS");
 
 
