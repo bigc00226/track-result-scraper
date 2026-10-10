@@ -15,6 +15,67 @@ $t_url = str_replace('TimeTable.html', 'TimeTable.json', $t_url);
 $new_t_url = str_replace('TimeTable.json', '', $t_url);
 //echo $new_t_url;
 
+//入力された URL から「?」「#」より後ろ（Google アナリティクスの「?_gl=…」など）と前後の空白を取り除き、
+//大会のフォルダ（TimeTable.json のある場所）を求め直す
+//  「?_gl=…」などが付いたままだと、各種目のデータ（result/…json）を読み込めず、
+//  種目名だけが出て、氏名・所属が出力されなかったため
+//  上段（nishi.php）と同じく、…/shtml/ や同じフォルダの他のページの URL でも動くようにする
+$nx_url01 = isset($_POST['url']) ? trim($_POST['url']) : '';
+$nx_url02 = preg_replace('/[?#].*$/s', '', $nx_url01);
+$nx_base = '';
+if (preg_match('#^(https?://[^/]+/.*)TimeTable\.(html|json)$#i', $nx_url02, $nx_m)){
+$nx_base = $nx_m[1];
+}elseif (preg_match('#^(https?://[^/]+)(/.*)?$#i', $nx_url02, $nx_m)){
+//TimeTable.html 以外の URL：候補のフォルダを順に試し、TimeTable.json を読めたフォルダを使う
+$nx_path = (isset($nx_m[2]) && $nx_m[2] !== '') ? $nx_m[2] : '/';
+$nx_candidates = array();
+$nx_pos = strpos($nx_path, '/shtml/');
+if ($nx_pos !== false){
+$nx_candidates[] = $nx_m[1] . substr($nx_path, 0, $nx_pos + 7);
+}
+if (substr($nx_path, -1) === '/'){
+$nx_dir = $nx_path;
+}elseif (strpos(basename($nx_path), '.') !== false){
+$nx_dir = rtrim(dirname($nx_path), '/') . '/';
+}else{
+$nx_dir = $nx_path . '/';
+}
+$nx_candidates[] = $nx_m[1] . $nx_dir;
+$nx_candidates[] = $nx_m[1] . $nx_dir . 'shtml/';
+foreach (array_unique($nx_candidates) as $nx_candidate){
+if (strpos((string)@file_get_contents($nx_candidate . 'TimeTable.json'), 'SyumokuBetsuList') !== false){
+$nx_base = $nx_candidate;
+break;
+}
+}
+}
+if ($nx_base !== ''){
+$t_url = $nx_base . 'TimeTable.json';
+$new_t_url = $nx_base;
+}
+
+//各種目のデータ（result/…json）を受け取れたか：最後が「}」か、"SubTitle"（選手のデータより後ろにある項目）があれば受け取れたとみなす
+function nx_race_ok($body){
+return ($body !== false && $body !== '' && (substr(rtrim($body), -1) === '}' || strpos($body, '"SubTitle"') !== false));
+}
+//各種目のデータを読み込む
+//  受け取れなかったときは 1回だけ読み直す（読み直す前に 0.5秒待つのは 10回まで。サーバが止まっているときに長く待たないため）
+function nx_fetch_race($url){
+static $nx_sleeps = 0;
+$body = @file_get_contents($url);
+if (!nx_race_ok($body)){
+if ($nx_sleeps < 10){
+usleep(500000);
+$nx_sleeps++;
+}
+$retry = @file_get_contents($url);
+if (nx_race_ok($retry) || ($retry !== false && ($body === false || strlen($retry) >= strlen($body)))){
+$body = $retry;
+}
+}
+return $body;
+}
+
 $minus_word = mb_convert_encoding('－', 'UTF-8', 'EUC-JP,Shift-JIS,UTF-8');
 $plus_word = mb_convert_encoding('＋', 'UTF-8', 'EUC-JP,Shift-JIS,UTF-8');
 $kanryou_word = mb_convert_encoding('コピー完了！！', 'UTF-8', 'EUC-JP,Shift-JIS,UTF-8');
@@ -328,7 +389,8 @@ $x_race_type = $x_race_type00 . $race_shubetsu00;
 
 
 //////////////// 種目毎処理 ////////////////
-$t_url_base2 = @file_get_contents($new_url);
+//各種目のデータは 1回だけ読み込み、下の「組毎処理」でも同じデータを使う（これまでは同じデータを 2回読み込んでいた）
+$t_url_base2 = nx_fetch_race($new_url);
 //echo "<p>" . $t_url_base2 . "</p>\r\n";
 
 $search_t_url_base01 = strpos($t_url_base2, '],"1":');//結果
@@ -366,8 +428,17 @@ if (!$search_konsei1 || $search_konsei2){//必要のない競技非表示
 /////////////////////////////////////////////種目 詳細//////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 echo '<div class="cp_actab">' . "\r\n";
-echo '<input id="' . $x_sex . $x_event_type . $x_race_type . '" type="checkbox" name="tabs">' . "\r\n";
-echo '<label for="' . $x_sex . $x_event_type . $x_race_type . '" style="color:' . $x_sex_color . ';background-color:#6E6E6E;">' . $x_sex . ' ' . $x_event_type .  ' ' . $x_race_type . '</label>' . "\r\n";
+//開閉の id：同じ名前の種目が 2つ以上ある大会（例：男子110mH 決勝が 2つ）では id が重なり、
+//2つ目以降の種目を開けなかったため、2つ目以降は id の後ろに番号を付ける（1つ目はこれまでどおり）
+$x_tab_id = $x_sex . $x_event_type . $x_race_type;
+if (isset($x_tab_ids[$x_tab_id])){
+$x_tab_ids[$x_tab_id]++;
+$x_tab_id .= '_' . $x_tab_ids[$x_tab_id];
+}else{
+$x_tab_ids[$x_tab_id] = 1;
+}
+echo '<input id="' . $x_tab_id . '" type="checkbox" name="tabs">' . "\r\n";
+echo '<label for="' . $x_tab_id . '" style="color:' . $x_sex_color . ';background-color:#6E6E6E;">' . $x_sex . ' ' . $x_event_type .  ' ' . $x_race_type . '</label>' . "\r\n";
 echo '<div class="cp_actab-content">' . "\r\n\r\n";
 echo "<table class=\"s-tbl2\" width=\"100%\" style=\"width:100%;\">\r\n";
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -378,7 +449,11 @@ echo "<table class=\"s-tbl2\" width=\"100%\" style=\"width:100%;\">\r\n";
 
 
 //////////////// 組毎処理 ////////////////
-$t_kumi_base = @file_get_contents($new_url);
+$t_kumi_base = $t_url_base2;
+//読み込めなかった種目は、最後にお知らせを表示する
+if (!nx_race_ok($t_kumi_base)){
+$nx_fail_events[] = $x_sex . ' ' . $x_event_type . ' ' . $x_race_type;
+}
 //記録表示（1/100・1/1000切替）の新仕様対応：1/100表示の記録 "Kiroku100" を従来の "Kiroku" として扱う
 $t_kumi_base = str_replace('"Kiroku100":', '"Kiroku":', $t_kumi_base);
 //echo "<p>" . $new_url . "</p>\r\n";
@@ -476,6 +551,13 @@ if ($kumi_count > 1){
 $new_heat = $heat03 . $heat_word01;
 }else{
 $new_heat = '';
+}
+
+//組の表示：「A決勝」「B決勝」のように「組」の付かない組は、その名前（A決勝 など）を表示する
+//  これまでは「組」とだけ表示され、A決勝と B決勝の区別が付かなかったため（組が 2つ以上ある種目のみ）
+$nx_heat_st = str_replace('"Status":"', '', (string)strstr((string)$heat01, '","', true));
+if ($kumi_count > 1 && strpos($nx_heat_st, $heat_word01) === false){
+$new_heat = trim(preg_replace('/(\s|\xE3\x80\x80).*$/s', '', $nx_heat_st));
 }
 
 //風速
@@ -616,7 +698,11 @@ $new_field_wind = '';
 //氏名
 $name_word01 = mb_convert_encoding('（', 'UTF-8', 'EUC-JP,Shift-JIS,UTF-8');
 $name_word02 = mb_convert_encoding('）', 'UTF-8', 'EUC-JP,Shift-JIS,UTF-8');
-$search_name_x = strpos($x_event_type, $event_type_word14);
+//リレーの判定：チーム名（"TeamTitle"）があり、選手名（"Kyogisha…"）がない行をリレーとする
+//  これまでは判定に使う文字（$event_type_word14）が定義されていなかったため判定が働かず、
+//  チーム名ではなく所属の略称が出力されて、同じ学校のAチーム・Bチームが同じ表示になっていた
+//$search_name_x = strpos($x_event_type, $event_type_word14);
+$search_name_x = (strpos($value_t_juni_base, '"TeamTitle"') !== false && strpos($value_t_juni_base, '"Kyogisha') === false);
 if ($search_name_x){
 $new_name = '';
 }else{
@@ -697,6 +783,10 @@ $affiliation_r08 = $affiliation_r07;
 }
 }else{
 $affiliation_r08 = $affiliation_r05;
+}
+//チーム名（TeamTitle）が空のときは、これまでどおり所属名を出力する
+if ($affiliation_r08 === ''){
+$affiliation_r08 = $affiliation1;
 }
 $new_affiliation1 = $affiliation_r08;
 }else{
@@ -954,5 +1044,19 @@ echo '';
 ?>
 
 </div>
+<?php
+//読み込めなかったデータがあるときは、コピーする範囲の外（灰色の四角の下）にお知らせを表示する
+$nx_notice = array();
+if (strpos((string)$t_url_base01, 'SyumokuBetsuList') === false){
+$nx_notice[] = mb_convert_encoding('大会のデータ（TimeTable.json）を読み込めませんでした。入力した URL をご確認ください（例：https://…/shtml/TimeTable.html）。', 'UTF-8', 'SJIS-win');
+}
+if (!empty($nx_fail_events)){
+$nx_notice[] = mb_convert_encoding('次の種目のデータを読み込めませんでした。少し時間をおいて、もう一度お試しください：', 'UTF-8', 'SJIS-win') . '<br>' . htmlspecialchars(implode(' / ', $nx_fail_events), ENT_QUOTES, 'UTF-8');
+}
+if ($nx_notice){
+echo '<div id="nx-notice" style="max-width:800px;margin:0 auto 30px auto;padding:8px 12px;border:1px solid #E0A800;background:#FFF8E1;color:#6D4C00;font-size:15px;line-height:1.8;">' . implode('<br>', $nx_notice) . '</div>' . "\r\n";
+echo '<script>(function(){var n=document.getElementById("nx-notice");var b=document.querySelector(".ex-box");if(n&&b){b.parentNode.insertBefore(n,b);}})();</script>' . "\r\n";
+}
+?>
 </body>
 </html>

@@ -15,6 +15,45 @@ $t_url = str_replace('TimeTable.html', 'TimeTable.json', $t_url);
 $new_t_url = str_replace('TimeTable.json', '', $t_url);
 //echo $new_t_url;
 
+//入力された URL から「?」「#」より後ろ（Google アナリティクスの「?_gl=…」など）と前後の空白を取り除き、
+//大会のフォルダ（TimeTable.json のある場所）を求め直す
+//  「?_gl=…」などが付いたままだと、各種目のデータ（result/…json）を読み込めず、
+//  種目名・氏名・所属がどれも出力されなかったため（どの種目も「男女混合」とだけ表示されていた）
+//  上段（nishi.php）と同じく、…/shtml/ や同じフォルダの他のページの URL でも動くようにする
+$nx_url01 = isset($_GET['url']) ? trim($_GET['url']) : '';
+$nx_url02 = preg_replace('/[?#].*$/s', '', $nx_url01);
+$nx_base = '';
+if (preg_match('#^(https?://[^/]+/.*)TimeTable\.(html|json)$#i', $nx_url02, $nx_m)){
+$nx_base = $nx_m[1];
+}elseif (preg_match('#^(https?://[^/]+)(/.*)?$#i', $nx_url02, $nx_m)){
+//TimeTable.html 以外の URL：候補のフォルダを順に試し、TimeTable.json を読めたフォルダを使う
+$nx_path = (isset($nx_m[2]) && $nx_m[2] !== '') ? $nx_m[2] : '/';
+$nx_candidates = array();
+$nx_pos = strpos($nx_path, '/shtml/');
+if ($nx_pos !== false){
+$nx_candidates[] = $nx_m[1] . substr($nx_path, 0, $nx_pos + 7);
+}
+if (substr($nx_path, -1) === '/'){
+$nx_dir = $nx_path;
+}elseif (strpos(basename($nx_path), '.') !== false){
+$nx_dir = rtrim(dirname($nx_path), '/') . '/';
+}else{
+$nx_dir = $nx_path . '/';
+}
+$nx_candidates[] = $nx_m[1] . $nx_dir;
+$nx_candidates[] = $nx_m[1] . $nx_dir . 'shtml/';
+foreach (array_unique($nx_candidates) as $nx_candidate){
+if (strpos((string)@file_get_contents($nx_candidate . 'TimeTable.json'), 'SyumokuBetsuList') !== false){
+$nx_base = $nx_candidate;
+break;
+}
+}
+}
+if ($nx_base !== ''){
+$t_url = $nx_base . 'TimeTable.json';
+$new_t_url = $nx_base;
+}
+
 
 //echo "★";
 
@@ -375,6 +414,10 @@ $event_type100 = $event_type_word36;
 $race_shubetsu00 = str_replace($event_type100, '', $event_type27);
 }else{
 $event_type100 = $event_type27;
+//種目名を判定できなかったとき（例：小学1年80m・テニスボール投・ジャベボール投）は、先頭の "SubTitle":" を取り除いた名前を種目名にする
+//  （取り除かないとリンクが「"」で切れて開けない種目になり、名前・所属が表示されません。種別は種目名に含まれるので【】は付けません）
+$event_type100 = trim(str_replace(array('"SubTitle":"', 'SubTitle":"'), '', $event_type100));
+$race_shubetsu00 = '';
 }
 $x_event_type = $event_type100;
 }//パラ・混成以外
@@ -565,6 +608,13 @@ if ($kumi_count > 1){
 $new_heat = $heat03 . $heat_word01;
 }else{
 $new_heat = '';
+}
+
+//組の表示：「A決勝」「B決勝」のように「組」の付かない組は、その名前（A決勝 など）を表示する
+//  これまでは「組」とだけ表示され、A決勝と B決勝の区別が付かなかったため（組が 2つ以上ある種目のみ）
+$nx_heat_st = str_replace('"Status":"', '', (string)strstr((string)$heat01, '","', true));
+if ($kumi_count > 1 && strpos($nx_heat_st, $heat_word01) === false){
+$new_heat = trim(preg_replace('/(\s|\xE3\x80\x80).*$/s', '', $nx_heat_st));
 }
 
 //風速
