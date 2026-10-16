@@ -4,6 +4,8 @@
  *   対応している形式
  *   (1) 記録処理ソフトの表形式（ﾚｰﾝ/ORD/試順・ﾅﾝﾊﾞｰ・氏名・所属…、2組が左右に並ぶ形も可）
  *       国スポ・奈良市サーキット・U16・InDesign 版プログラムなど
+ *       東信選手権の形（組の見出し「［ 1 組 ］」、「所属/学年」の欄の所属の下に学年、
+ *       リレーは見出し「ﾚｰﾝ所属/Bib」でチーム名の下にメンバー）も含む
  *   (2) リレーの枠形式（「1ﾚｰﾝ チーム名 記録」の下にメンバーが並ぶ形）
  *   (3) 1行1人の一覧表形式（種別・種目名・男女・競技者名・学年・学校名・組・レーン）
  *
@@ -39,14 +41,18 @@
         if (!m) return null;
         var r = m[1] === 'TR決勝' ? 'タイムレース決勝' : m[1];
         var rest = s.slice(m[1].length);
-        var info = null, mm = rest.match(/^\(?全?(\d{1,3})組/);
+        var info = null, mm = rest.match(/^\(?全?(\d{1,3})組/) || rest.match(/^\(?タイムレース\(?全?(\d{1,3})組/);
         if (mm) info = parseInt(mm[1], 10);
+        // 「決勝 3組 タイムレース」「決勝 タイムレース 3組」→ タイムレース決勝（「予選 5組 タイムレース 8」は予選のまま）
+        if (r === '決勝' && /^\(?(全?\d{1,3}組)?タイムレース/.test(rest)) r = 'タイムレース決勝';
         return { round: r, heats: info };
     }
 
     function isTitle(line, page) {
         if (!line.words.length || line.words[0].x > page.width * 0.5) return false;
         if (line.fs < 13.5) return false;
+        // 「決勝 ※中学女子800mと同走」のように、ラウンドの語で始まる注記の行は種目名ではない
+        if (/^(予選|準々決勝|準決勝|決勝|タイムレース決勝|タイムレース)$/.test(normWord(line.words[0].t)) && /※|同走/.test(norm(line.text))) return false;
         var s = norm(titleText(line));
         return /男|女/.test(s) && EVENT_START_RE.test(s);
     }
@@ -121,7 +127,7 @@
         var team = [], pref = '', qual = '';
         lines.forEach(function (t) {
             var sq = squash(norm(t));
-            if (!sq || /^[()（）.\-+･・m\s]*$/.test(sq)) return;    // 「( ) .」「m」などの空欄の記号
+            if (!sq || /^[()（）〔〕.:\-+･・m\s]*$/.test(sq)) return;    // 「( ) .」「m」「〔 〕 : .」などの空欄の記号
             if (/^[+\-±]?\d{1,2}\.\d$/.test(sq)) return;            // 風
             if (C.isRecord(sq)) { if (!qual) qual = sq; return; }
             // 風の記号（「+」「-」「+･-」）が所属の右に並ぶ表があるので、前後の記号を取り除く
@@ -155,14 +161,25 @@
     // (1) 表形式
     // ---------------------------------------------------------------
     var HDR = {
-        lane: /^(ﾚｰﾝ|レーン|ORD|試順|試|順|ｵｰﾀﾞｰ)$/,
+        lane: /^(ﾚｰﾝ|レーン|ORD|試順|試|順|ｵｰﾀﾞｰ|ｵｰﾀﾞｰ\(ﾚｰﾝ\))$/,
         name: /^(氏|氏名|競技者名)$/,
-        team: /^(所|所属|所属\/資格記録)$/,
+        team: /^(所|所属|所属\/資格記録|所属\/学年)$/,
         qual: /^(資格記録|資格|前記録|参考記録|参考)$/,
         result: /順位|^1回目$|^ｺﾒﾝﾄ$/
     };
+    // ナンバーと氏名の見出しがくっついた語「Bib氏名」
+    var BIB_NAME_RE = /^(Bib|BIB|ビブ)\.?氏名$/;
+    // リレーの表の見出し「ﾚｰﾝ所属/Bib」（レーン・チーム名の行と、ナンバー・メンバーの行）
+    var RELAY_HDR_RE = /^(ﾚｰﾝ|レーン|ｵｰﾀﾞｰ|オーダー)?所属\/(Bib|BIB)\.?$/;
 
-    function isNameHeader(L) { return L.words.some(function (w) { return /^(氏|氏名|名|競技者名)$/.test(w.t); }); }
+    function isNameHeader(L) { return L.words.some(function (w) { return /^(氏|氏名|名|競技者名)$/.test(w.t) || BIB_NAME_RE.test(w.t); }); }
+
+    // 表の見出しの語（次の表の見出しが、どの列にあるかを見るのに使う）
+    function isHeaderWord(w) {
+        return HDR.lane.test(w.t) || HDR.team.test(w.t) || HDR.qual.test(w.t) || /^(氏|氏名|名|競技者名)$/.test(w.t) ||
+            /順位|記録|^ｶﾅ\/学年$/.test(w.t) || /^(Bib|BIB|ビブ)\.?$/.test(w.t) || BIB_NAME_RE.test(w.t) || RELAY_HDR_RE.test(w.t) ||
+            /ナンバー$/.test(C.hanToZenKana(w.t));
+    }
 
     // 見出しの語がくっついている表（「ﾚｰﾝﾅﾝﾊﾞｰ」）にも対応する
     function numberHeaders(line) {
@@ -170,6 +187,17 @@
         line.words.forEach(function (w) {
             // ナンバーの列の見出し：「ﾅﾝﾊﾞｰ」「Bib.」
             if (/^(Bib|BIB|ビブ)\.?$/.test(w.t)) { out.push({ x: w.x, laneX: null, w: w }); return; }
+            // 「Bib氏名」：ナンバーは語の先頭、氏名は「氏」の位置から
+            if (BIB_NAME_RE.test(w.t)) {
+                out.push({ x: w.x, laneX: null, w: w, nameX: w.x + (w.x2 - w.x) * (w.t.indexOf('氏') / w.t.length) });
+                return;
+            }
+            // 「ﾚｰﾝ所属/Bib」：レーンは語の先頭、ナンバーは「Bib」の位置から
+            if (RELAY_HDR_RE.test(w.t)) {
+                var bi = w.t.search(/Bib|BIB/);
+                out.push({ x: w.x + (w.x2 - w.x) * (bi / w.t.length), laneX: /^所属/.test(w.t) ? null : w.x, w: w, relay: true });
+                return;
+            }
             var t = C.hanToZenKana(w.t);
             if (t === 'ナンバー') { out.push({ x: w.x, laneX: null, w: w }); return; }
             // 見出しがくっついた語は「レーンナンバー」「ORDナンバー」などだけ（「ナンバーワンクラブ」などの所属名は除く）
@@ -194,7 +222,8 @@
             // 列の中央（行の先頭の番号がレーン・試順の列か、ナンバーの列かを見分けるのに使う）
             var numC = (nw.x + nw.w.x2) / 2;
             var laneC = nw.laneX !== null ? (nw.w.x + nw.x) / 2 : (laneW ? (laneW.x + laneW.x2) / 2 : null);
-            return { numX: nw.x, laneX: nw.laneX !== null ? nw.laneX : (laneW ? laneW.x : nw.x - 14), numC: numC, laneC: laneC };
+            return { numX: nw.x, laneX: nw.laneX !== null ? nw.laneX : (laneW ? laneW.x : nw.x - 14), numC: numC, laneC: laneC,
+                     nameHint: nw.nameX !== undefined ? nw.nameX : null, relay: !!nw.relay };
         }).sort(function (a, b) { return a.laneX - b.laneX; });
         blocks.forEach(function (b, i) {
             b.x0 = b.laneX - 8;
@@ -205,8 +234,10 @@
                     .sort(function (a, b2) { return a.x - b2.x; });
                 return c.length ? c[0].x : null;
             };
-            b.nameX = first(HDR.name, b.numX) || b.numX + 20;
+            b.nameX = first(HDR.name, b.numX) || b.nameHint || b.numX + 20;
             b.teamX = first(HDR.team, b.nameX) || b.nameX + 60;
+            // 「所属/学年」の列：所属の下の行に「(3)」のように学年が書かれている
+            b.teamGrade = inB.some(function (w) { return /^所属\/学年$/.test(w.t); });
             b.qualX = first(HDR.qual, b.teamX);
             b.resultX = first(/順位|^1回目$/, b.teamX) || b.x1;
             if (b.qualX !== null && b.qualX >= b.resultX) b.qualX = null;
@@ -217,14 +248,14 @@
                 return (Math.min.apply(null, ws.map(function (w) { return w.x; })) + Math.max.apply(null, ws.map(function (w) { return w.x2; }))) / 2;
             };
             var nameC = span(/^(氏|名|氏名|競技者名)$/, b.nameX - 1, b.teamX - 1) || b.nameX + 20;
-            var teamC = span(/^(所|属|所属|属\/資格記録|所属\/資格記録)$/, b.teamX - 1, b.qualX !== null ? b.qualX - 1 : b.resultX - 1) || b.teamX + 20;
+            var teamC = span(/^(所|属|所属|属\/資格記録|所属\/資格記録|所属\/学年)$/, b.teamX - 1, b.qualX !== null ? b.qualX - 1 : b.resultX - 1) || b.teamX + 20;
             var qualC = b.qualX !== null ? span(HDR.qual, b.qualX - 1, b.resultX - 1) : null;
             b.nameC = nameC;
             b.teamC = teamC;
             // 氏名と所属の境目：見出しの中央と中央の間（見出しが列の中央に書かれている表に対応）
             b.nameEnd = Math.max(Math.min((nameC + teamC) / 2, b.teamX - 3), nameC);
             b.teamEnd = qualC !== null ? Math.max(Math.min((teamC + qualC) / 2, b.qualX - 3), teamC) : b.resultX - 1;
-            b.hasName = inB.some(function (w) { return HDR.name.test(w.t) && w.x > b.numX - 4; });
+            b.hasName = b.nameHint !== null || inB.some(function (w) { return HDR.name.test(w.t) && w.x > b.numX - 4; });
             b.hdrY = C.headerBottom(zone, hdrLine, b.x0, b.x1);
         });
         // ラップ表などの「ナンバー」だけの表は対象外
@@ -245,14 +276,16 @@
             var w0 = ws[0];
             // 行の先頭はレーン・試順の番号（ナンバーの列より左）。
             //   ナンバーだけが少し上にずれて別の行になっている表では、ナンバーを先頭と間違えない
-            if (!/^\d{1,3}$/.test(w0.t) || w0.x >= b.nameX - 1) return;
+            //   「ｵｰﾀﾞｰ(ﾚｰﾝ)」の列は「9(10)」のように書かれている（オーダーの番号を使う）
+            var om = w0.t.match(/^(\d{1,3})(?:[(（]\d{1,2}[)）])?$/);
+            if (!om || w0.x >= b.nameX - 1) return;
             if (b.laneC !== null) {
                 var c0 = (w0.x + w0.x2) / 2;
                 if (Math.abs(c0 - b.numC) < Math.abs(c0 - b.laneC)) return;
             }
             var bib = '';
             if (ws[1] && ws[1].x < b.nameX - 1 && /^[0-9A-Za-z\-]+$/.test(C.zenToHanAscii(ws[1].t))) bib = C.zenToHanAscii(ws[1].t);   // 「E１０１０」も
-            anchors.push({ y: L.y, order: parseInt(w0.t, 10), bib: bib, w0: w0, w1: bib ? ws[1] : null });
+            anchors.push({ y: L.y, order: parseInt(om[1], 10), bib: bib, w0: w0, w1: bib ? ws[1] : null });
         });
         anchors.sort(function (a, c) { return a.y - c.y; });
         // 氏名の列の始まり：レーン番号の右（見出しより左から名前が書かれている表もある）
@@ -304,6 +337,30 @@
         rows.forEach(function (row) {
             var ws = row.words;
             var byLine = C.wordsByLine;
+            if (b.relay) {
+                // リレーの表（「ﾚｰﾝ所属/Bib」）：レーン番号の行のチーム名だけ（下に並ぶメンバーの行は使わない）
+                var near = Math.max(row.a.w0.fs || 0, 6) * 0.35;
+                var tws = ws.filter(function (w) {
+                    // 右の順位・記録の欄の「( )」は除く
+                    return Math.abs(w.y - row.a.y) <= near && w.x < b.resultX - 1 && !/^[()（）\s]+$/.test(w.t);
+                });
+                if (row.a.w1) tws.push(row.a.w1);      // 英字だけのチーム名（「MORE」など）はナンバーの欄として拾われている
+                tws.sort(function (p, q) { return p.x - q.x; });
+                // チームの行に資格記録がある表では、記録はチーム名に入れない
+                var rq = '';
+                tws = tws.filter(function (w) {
+                    var q = squash(norm(w.t));
+                    if (C.isRecord(q)) { rq = rq || q; return false; }
+                    return true;
+                });
+                var rawTeam = tws.map(function (w) { return w.t; }).join(' ');
+                var rt = splitTeam([rawTeam]);
+                if (!rt.team && !rt.pref) return;
+                // 「長野」（長野高）・「東京都」など、都道府県名と同じチーム名もチーム名として残す
+                entries.push({ order: row.a.order, bib: '', name: '', team: rt.team || squash(norm(rawTeam)), pref: rt.team ? rt.pref : '',
+                               qual: rq || rt.qual, relay: true, y: row.a.y });
+                return;
+            }
             // 学年の列（見出しなし）：氏名と所属の間に、行の基準と同じ高さで数字だけが書かれている表
             //   「6 187 1 西九州大学 11.60」→ 学年 1 → 氏名の後ろに (1)
             var grade = '';
@@ -341,7 +398,19 @@
                 var sc = nameScore(l.text) - Math.abs(l.y - row.a.y) / 100;
                 if (!best || sc > best.sc) best = { sc: sc, text: l.text };
             });
-            var t = splitTeam(teamLines.map(function (l) { return l.text; }));
+            var teamTexts = teamLines.map(function (l) { return l.text; });
+            if (b.teamGrade) {
+                // 「所属/学年」の列：所属の下の行の「(3)」「(M)」は学年（所属には入れない）
+                //   都道府県名が ( ) で書かれている場合は、都道府県として扱う
+                teamTexts = teamTexts.map(function (tx) {
+                    var gm = squash(norm(tx)).match(/^\(([^()]{1,4})\)$/);
+                    if (!gm) return tx;
+                    if (C.isPref(gm[1]) || REGION_RE.test(gm[1])) return gm[1];
+                    if (!grade) grade = gm[1];
+                    return '';
+                });
+            }
+            var t = splitTeam(teamTexts);
             qualLines.forEach(function (l) {
                 var q = squash(norm(l.text));
                 if (!t.qual && C.isRecord(q)) t.qual = q;
@@ -535,10 +604,24 @@
                 }
                 // 見出しの行：ナンバーの列と氏名の列がある行
                 //（「氏名」にフリガナ「シメイ」が付いていて、少し下の別の行になっている表もある）
-                if (numberHeaders(L).length && lines.some(function (L2) { return Math.abs(L2.y - L.y) <= 6 && isNameHeader(L2); })) marks.push({ type: 'header', y: L.y, idx: idx });
+                var nhs = numberHeaders(L);
+                if (nhs.length && lines.some(function (L2) { return Math.abs(L2.y - L.y) <= 6 && isNameHeader(L2); })) {
+                    marks.push({ type: 'header', y: L.y, idx: idx, hdrXs: L.words.filter(isHeaderWord).map(function (w) { return w.x; }) });
+                }
                 if (isRelayLine(L)) marks.push({ type: 'relay', y: L.y, idx: idx });
                 L.words.forEach(function (w, wi) {
-                    var m = C.zenToHanAscii(w.t).match(HEAT_RE);
+                    // 組の見出し：「1組」「［1組］」、括弧・番号・「組」が別々の語になっている「[ 1 組 ]」
+                    var hw = C.zenToHanAscii(w.t);
+                    var m = hw.replace(/^[\[【]\s*/, '').replace(/\s*[\]】]$/, '').match(HEAT_RE);
+                    if (!m && /^[\[【]/.test(hw)) {
+                        // 括弧で始まる語から 4語までをつなげて「[1組]」の形になれば組の見出し（「[ 1 組 ]」「[1 組]」など）
+                        var joined = '';
+                        for (var j = wi; j < L.words.length && j < wi + 4; j++) {
+                            joined += squash(C.zenToHanAscii(L.words[j].t));
+                            var jm = joined.match(/^[\[【](\d{1,3})組[\]】]?$/);
+                            if (jm) { m = jm; break; }
+                        }
+                    }
                     if (m) marks.push({ type: 'heat', y: L.y, x: w.x, no: parseInt(m[1], 10) });
                     // 跳躍・投てきのピットごとの組「Group A」「A組」→ A組（1組）・B組（2組）
                     var g = null, ht = C.zenToHanAscii(w.t);
@@ -576,18 +659,23 @@
                 if (ev.pages.indexOf(page.num) < 0) ev.pages.push(page.num);
 
                 // この区切りの下端（次の区切り）
-                var stopY = page.height + 1;
-                for (var k = mi + 1; k < marks.length; k++) {
-                    var t = marks[k].type;
-                    if (t === 'title' || t === 'round' || t === 'end' || (t === 'header' && marks[k].y > m.y + 16) ||
-                        (t === 'heat' && marks[k].y > m.y + 16) || (t === 'relay' && m.type === 'relay' && marks[k].y > m.y + 2 && false)) {
-                        stopY = marks[k].y - 1; break;
+                //   次の表の見出しは、同じ列の表のときだけ区切りにする（左右に並んだ表で、右の列だけにある
+                //   「決勝」の空の表などの見出しで、左の列の組の途中から下が切れないように）
+                var stopFor = function (b) {
+                    for (var k = mi + 1; k < marks.length; k++) {
+                        var mk = marks[k], t = mk.type;
+                        if (t === 'title' || t === 'round' || t === 'end') return mk.y - 1;
+                        if (t === 'heat' && mk.y > m.y + 16) return mk.y - 1;
+                        if (t === 'header' && mk.y > m.y + 16 &&
+                            mk.hdrXs.some(function (x) { return x >= b.x0 && x < b.resultX; })) return mk.y - 1;
                     }
-                }
+                    return page.height + 1;
+                };
 
                 if (m.type === 'header') {
                     var blocks = findBlocks(page, lines[m.idx]);
                     blocks.forEach(function (b) {
+                        var stopY = stopFor(b);
                         var region = lines.filter(function (L) { return L.y > b.hdrY + 1 && L.y < stopY; });
                         var label = heatLabels.filter(function (h) {
                             return h.y < m.y && m.y - h.y < 30 && h.x >= b.x0 - 20 && h.x < b.x1;
